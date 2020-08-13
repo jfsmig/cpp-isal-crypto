@@ -5,6 +5,8 @@ include(GoogleTest)
 find_package(Threads)
 find_package(PkgConfig REQUIRED)
 
+enable_testing()
+
 set(CMAKE_CXX_STANDARD 17)
 
 set(CMAKE_CXX_FLAGS "-g -fPIC -fPIE -pipe -Wall -Wextra -Werror")
@@ -59,3 +61,23 @@ target_link_libraries(example-stream cpp-isal-crypto)
 
 add_executable(example-simple examples/example_simple.cpp)
 target_link_libraries(example-simple cpp-isal-crypto)
+
+if (NOT DEFINED CPPLINT_EXE)
+	find_program(CPPLINT_EXE cpplint)
+endif ()
+
+if (CPPLINT_EXE)
+	add_test(NAME format/src COMMAND
+		${CPPLINT_EXE} --recursive --repository=${CMAKE_SOURCE_DIR} --root=src
+		${CMAKE_SOURCE_DIR}/src)
+
+	add_test(NAME format/test COMMAND
+		${CPPLINT_EXE} --recursive --repository=${CMAKE_SOURCE_DIR} --root=test
+		${CMAKE_SOURCE_DIR}/test)
+
+	add_test(NAME format/examples COMMAND
+		${CPPLINT_EXE} --recursive --repository=${CMAKE_SOURCE_DIR} --root=examples
+		${CMAKE_SOURCE_DIR}/examples)
+
+endif()
+

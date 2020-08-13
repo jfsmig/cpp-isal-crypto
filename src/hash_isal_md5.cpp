@@ -15,16 +15,20 @@ enum class State {
   // Ready to be Reserved to a stream
   Idle = 0,
 
-  // Reserved to a stream but not initiated yet. Out of the waiting line.
+  // Reserved to a stream but not initiated yet
+  // Out of the waiting line
   Reserved,
 
-  // Reserved to a stream but not initiated yet. In the waiting line.
+  // Reserved to a stream but not initiated yet
+  // In the waiting line
   Reserved_Waiting,
 
-  // Reserved to a stream, initiated but no computation active, Out of the waiting line
+  // Reserved to a stream, initiated but no computation active
+  // Out of the waiting line
   Ready,
 
-  // Reserved to a stream, initiated but no computation active, in the waiting line
+  // Reserved to a stream, initiated but no computation active
+  // In the waiting line
   Ready_Waiting,
 
   // Reserved to a stream, a (first / middle) computation is currently running
@@ -52,22 +56,21 @@ struct StreamEntry {
 };
 
 class Scheduler : public SchedulerInterface {
-
-public:
+ public:
   ~Scheduler();
 
   Scheduler();
 
   std::shared_ptr<Stream> MakeStream() override;
 
-protected:
+ protected:
   void stream_update(uint32_t id, std::shared_ptr<Buffer> buffer) override;
 
   std::future<std::string> stream_finish(uint32_t id) override;
 
   void stream_release(uint32_t id) override;
 
-private:
+ private:
   /**
    * Notify the background routine that there is a new buffer to be considered.
    */
@@ -103,7 +106,7 @@ private:
    */
   void background_stream_completion(StreamEntry *stream);
 
-private:
+ private:
   MD5_HASH_CTX_MGR manager_;
 
   std::mutex mutex_;
@@ -248,7 +251,8 @@ void Scheduler::background_stream_trigger(StreamEntry *stream) {
     case State::Ready_Waiting:
       assert(stream->current_block_.get() != nullptr);
       stream->state_ = State::Active;
-      ctx = md5_ctx_mgr_submit(&manager_, &stream->hasher_, buf->data(), buf->size(), flags);
+      ctx = md5_ctx_mgr_submit(&manager_, &stream->hasher_,
+                               buf->data(), buf->size(), flags);
       done = reinterpret_cast<StreamEntry *>(ctx->user_data);
       if (done != nullptr) {
         background_stream_completion(done);
@@ -293,7 +297,8 @@ void Scheduler::background_wait_for_lane() {
       if (ptr == &ctx) {
         throw std::logic_error("NYI");
       } else {
-        return background_stream_completion(reinterpret_cast<StreamEntry *>(ptr));
+        auto se = reinterpret_cast<StreamEntry *>(ptr);
+        return background_stream_completion(se);
       }
     }
     auto quantum = std::chrono::duration<int, std::micro>(100);
@@ -344,7 +349,7 @@ void Scheduler::stream_update(uint32_t id, std::shared_ptr<Buffer> buffer) {
 
 std::future<std::string> Scheduler::stream_finish(uint32_t id) {
   LOG(ERROR) << __func__;
-  //return streams_.at(id).result_.get_future();
+  // return streams_.at(id).result_.get_future();
   auto &stream = streams_.at(id);
   (void) stream;
   throw std::logic_error("NYI");
@@ -358,10 +363,10 @@ void Scheduler::stream_release(uint32_t id) {
       throw std::logic_error("BUG: cannot release an idle stream");
     case State::Active:
     case State::Finishing:
-      throw std::logic_error("NYI: releasing a stream with active computations");
+      throw std::logic_error("NYI: releasing a stream while active");
     case State::Ready_Waiting:
     case State::Reserved_Waiting:
-      throw std::logic_error("NYI: releasing a stream waiting for computations");
+      throw std::logic_error("NYI: releasing a stream while waiting");
     case State::Ready:
     case State::Reserved:
     case State::Finished:

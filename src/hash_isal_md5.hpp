@@ -3,23 +3,23 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-#ifndef MD5TEST_ISALCPP_H
-#define MD5TEST_ISALCPP_H
+#ifndef HASH_ISAL_MD5_HPP_
+#define HASH_ISAL_MD5_HPP_
+
+#include <isa-l_crypto.h>
 
 #include <memory>
 #include <cassert>
 #include <utility>
-#include <future>
+#include <future>  // NOLINT
 #include <array>
 #include <queue>
 #include <string>
 
-#include <isa-l_crypto.h>
-
 namespace hash {
 
 class Buffer {
-public:
+ public:
   virtual ~Buffer() {}
 
   Buffer(const Buffer &o) = delete;
@@ -30,7 +30,7 @@ public:
 
   virtual size_t size() = 0;
 
-protected:
+ protected:
   Buffer() = default;
 };
 
@@ -50,7 +50,7 @@ struct StaticBuffer : public Buffer {
 };
 
 struct StringBuffer : public Buffer {
-  uint8_t *data() { return reinterpret_cast<uint8_t*>(sub_.data()); }
+  uint8_t *data() { return reinterpret_cast<uint8_t *>(sub_.data()); }
 
   size_t size() { return sub_.size(); }
 
@@ -58,7 +58,7 @@ struct StringBuffer : public Buffer {
 
   StringBuffer() = delete;
 
-  StringBuffer(std::string s) : sub_(s) {}
+  explicit StringBuffer(std::string s) : sub_(s) {}
 
   std::string sub_;
 };
@@ -75,7 +75,7 @@ class SchedulerInterface;
 class Stream {
   friend class SchedulerInterface;
 
-public:
+ public:
   Stream() = delete;
 
   Stream(Stream &&o) = delete;
@@ -91,7 +91,7 @@ public:
   explicit Stream(SchedulerInterface *srv, uint32_t index) :
       scheduler_{srv}, index_{index} {}
 
-private:
+ private:
   SchedulerInterface *scheduler_;
   uint32_t index_;
 };
@@ -102,14 +102,14 @@ private:
 class SchedulerInterface {
   friend class Stream;
 
-public:
+ public:
   virtual ~SchedulerInterface() {}
 
   virtual std::shared_ptr<Stream> MakeStream() = 0;
 
   static std::shared_ptr<SchedulerInterface> New();
 
-protected:
+ protected:
   SchedulerInterface() {}
 
   SchedulerInterface(const SchedulerInterface &o) = delete;
@@ -127,4 +127,4 @@ protected:
 }  // namespace md5
 }  // namespace hash
 
-#endif //MD5TEST_ISALCPP_H
+#endif  // HASH_ISAL_MD5_HPP_

@@ -5,7 +5,7 @@
 
 #include <array>
 #include <vector>
-#include <thread>
+#include <thread>  // NOLINT
 #include <iostream>
 
 #include "../src/hash_isal_md5.hpp"
