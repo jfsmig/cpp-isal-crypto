@@ -19,11 +19,13 @@ int main(int argc, char **argv) {
 
   auto server = SchedulerInterface::New();
 
-  // Prepare N streams, where the stream 'i' starts checksuming at line 'i'
+  // Prepare N streams, one for each offset
   std::vector<std::shared_ptr<Stream>> streams;
   for (int i{0}; i < N; i++)
     streams.push_back(server->MakeStream());
 
+  // Feed the N streams, shere the stream 'i' starts
+  // checksuming at the line i-th line on the standard input.
   uint32_t i{0};
   std::string line;
   while (std::getline(std::cin, line)) {
@@ -33,13 +35,14 @@ int main(int argc, char **argv) {
     i++;
   }
 
+  // Finish all the streams and then collect the results
   std::vector<std::future<std::string>> results;
   for (auto &s : streams)
     results.push_back(s->Finish());
-
   // FIXME(jfs): should this work? currently it fails miserably.
   streams.clear();
-
   for (auto &rc : results)
     std::cout << rc.get() << std::endl;
+
+  return 0;
 }

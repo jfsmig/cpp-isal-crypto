@@ -15,22 +15,21 @@
 using hash::md5::isal::SchedulerInterface;
 using hash::StaticBuffer;
 
+// Prepare a block to be pushed.
 static std::array<uint8_t, 8192> blob;
+static std::shared_ptr<StaticBuffer> buffer(
+    new StaticBuffer(blob.data(), blob.size()));
 
 int main(int argc, char **argv) {
   (void) argc, (void) argv;
 
-  // Prepare a block to be pushed.
-  std::shared_ptr<StaticBuffer> buffer(
-      new StaticBuffer(blob.data(), blob.size()));
-
-  // Allocate
+  // Allocate the scheduler of our many streams
   auto server = SchedulerInterface::New();
 
   // Spawn many concurrent computations
   std::vector<std::thread> threads;
   for (int i{0}; i < N; i++) {
-    threads.emplace_back([server, buffer]() {
+    threads.emplace_back([server]() {
       auto client = server->MakeStream();
       client->Update(buffer);
       auto rc = client->Finish();

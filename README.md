@@ -8,52 +8,57 @@ Made with love by [the Authors](./AUTHORS.md).
 
 ## Examples
 
-### Multiple checksums on stdin
+### Checksuming A Single Stream
 
 ```c++
   auto server = SchedulerInterface::New();
+  auto stream = server->MakeStream();
+  for (int i{0}; i < N; i++)
+    stream->Update(buffer);
+  auto rc = stream->Finish();
+  std::cout << rc.get() << std::endl;
+```
 
-  // Prepare N streams, where the stream 'i' starts checksuming at line 'i'
+### Multiplexed checksums on stdin (mono-thread)
+
+```c++
+  // Allocate the scheduler of our few streams
+  auto server = SchedulerInterface::New();
+
+  // Prepare N streams, one for each offset
   std::vector<std::shared_ptr<Stream>> streams;
-  for (int i{0}; i<8; i++)
+  for (int i{0}; i < N; i++)
     streams.push_back(server->MakeStream());
 
+  // Feed the N streams, shere the stream 'i' starts
+  // checksuming at the line i-th line on the standard input.
   uint32_t i{0};
   std::string line;
   while (std::getline(std::cin, line)) {
     auto buf = std::make_shared<StringBuffer>(line);
-    for (typeof(i) j{0}; j<8 && j<=i; j++)
+    for (typeof(i) j{0}; j < N && j <= i; j++)
       streams[j]->Update(buf);
     i++;
   }
 
+  // Finish all the streams and then collect the results
   std::vector<std::future<std::string>> results;
   for (auto &s : streams)
     results.push_back(s->Finish());
-
-  // FIXME(jfs): should this work? currently it fails miserably.
-  streams.clear();
-
   for (auto &rc : results)
     std::cout << rc.get() << std::endl;
 ```
 
-### Many Concurrent Checksums
+### Many Concurrent Checksums (multi-thread)
 
 ```c++
-// Prepare a block to be pushed.
-std::array<uint8_t, 8192> blob;
-  // Prepare a block to be pushed.
-  std::shared_ptr<hash::StaticBuffer> buffer(
-      new hash::StaticBuffer(blob.data(), blob.size()));
-
-  // Allocate
-  auto server = hash::md5::isal::SchedulerInterface::New();
+  // Allocate the scheduler of our many streams
+  auto server = SchedulerInterface::New();
 
   // Spawn many concurrent computations
   std::vector<std::thread> threads;
-  for (int i{0}; i < 1024; i++) {
-    threads.emplace_back([server, buffer]() {
+  for (int i{0}; i < N; i++) {
+    threads.emplace_back([server]() {
       auto client = server->MakeStream();
       client->Update(buffer);
       auto rc = client->Finish();

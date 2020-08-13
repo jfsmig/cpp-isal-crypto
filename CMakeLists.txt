@@ -56,3 +56,6 @@ target_link_libraries(example-concurrency cpp-isal-crypto)
 
 add_executable(example-stream examples/example_stream.cpp)
 target_link_libraries(example-stream cpp-isal-crypto)
+
+add_executable(example-simple examples/example_simple.cpp)
+target_link_libraries(example-simple cpp-isal-crypto)
