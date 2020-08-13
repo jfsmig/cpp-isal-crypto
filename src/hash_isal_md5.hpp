@@ -12,7 +12,7 @@
 #include <future>
 #include <array>
 #include <queue>
-#include <deque>
+#include <string>
 
 #include <isa-l_crypto.h>
 
@@ -33,6 +33,36 @@ public:
 protected:
   Buffer() = default;
 };
+
+struct StaticBuffer : public Buffer {
+  uint8_t *data() { return data_; }
+
+  size_t size() { return size_; }
+
+  ~StaticBuffer() {}
+
+  StaticBuffer() = delete;
+
+  StaticBuffer(uint8_t *b, size_t s) : data_{b}, size_{s} {}
+
+  uint8_t *data_;
+  size_t size_;
+};
+
+struct StringBuffer : public Buffer {
+  uint8_t *data() { return reinterpret_cast<uint8_t*>(sub_.data()); }
+
+  size_t size() { return sub_.size(); }
+
+  ~StringBuffer() {}
+
+  StringBuffer() = delete;
+
+  StringBuffer(std::string s) : sub_(s) {}
+
+  std::string sub_;
+};
+
 
 namespace md5 {
 namespace isal {

@@ -50,3 +50,9 @@ target_link_libraries(test-cpp-isal-crypto
 		${GLOG_LIBRARIES})
 
 gtest_discover_tests(test-cpp-isal-crypto)
+
+add_executable(example-concurrency examples/example_concurrency.cpp)
+target_link_libraries(example-concurrency cpp-isal-crypto)
+
+add_executable(example-stream examples/example_stream.cpp)
+target_link_libraries(example-stream cpp-isal-crypto)

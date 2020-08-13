@@ -11,23 +11,10 @@
 
 #include "../src/hash_isal_md5.hpp"
 
-struct StaticBuffer : public hash::Buffer {
-  uint8_t *data() { return data_; }
-
-  size_t size() { return size_; }
-
-  ~StaticBuffer() {}
-
-  StaticBuffer() = delete;
-
-  StaticBuffer(uint8_t *b, size_t s) : data_{b}, size_{s} {}
-
-  uint8_t *data_;
-  size_t size_;
-};
-
 static std::array<uint8_t, 8192> blob;
-static std::shared_ptr<StaticBuffer> buffer(new StaticBuffer(blob.data(), blob.size()));
+
+static std::shared_ptr<hash::StaticBuffer> buffer(
+    new hash::StaticBuffer(blob.data(), blob.size()));
 
 TEST(MD5, SimpleRun) {
   auto server = hash::md5::isal::SchedulerInterface::New();
