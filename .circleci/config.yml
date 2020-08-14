@@ -7,9 +7,6 @@ executors:
   ubuntu-bionic:
     docker:
       - image: ubuntu:bionic
-  ubuntu-xenial:
-    docker:
-      - image: ubuntu:xenial
 
 workflows:
   all-tests:
@@ -17,7 +14,7 @@ workflows:
       - build:
           matrix:
             parameters:
-              os: [ubuntu-focal, ubuntu-bionic, ubuntu-xenial]
+              os: [ubuntu-focal, ubuntu-bionic]
       - linter
 jobs:
   build:
@@ -27,16 +24,30 @@ jobs:
     executor: << parameters.os >>
     steps:
       - checkout
+      - run: git submodule sync
+      - run: git submodule update --init
       - run:
           name: System dependencies
           command: |
-            apt-get update
-            apt-get install -y git cmake make build-essential libgtest-dev
+            set -ex
+            PKG='apt-get install -y --no-install-recommends'
+            export DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true
+            echo "tzdata tzdata/Areas select Europe" > /tmp/preseed.txt
+            echo "tzdata tzdata/Zones/Europe select Brussels" >> /tmp/preseed.txt
+            debconf-set-selections /tmp/preseed.txt
+            apt-get update -q
+            $PKG tzdata git libgtest-dev
+            $PKG pkg-config cmake make build-essential m4 autotools-dev autoconf automake libtool
+            $PKG yasm nasm
       - run:
-          name: Fetch code dependencies
+          name: Build isa-l_crypto
           command: |
-            git submodule sync
-            git submodule update --init
+            set -ex
+            cd vendor/isa-l_crypto
+            ./autogen.sh
+            ./configure --prefix=/usr --enable-shared --enable-static --no-create --no-recursion
+            make
+            sudo make install
       - run:
           name: Build and Test
           command: |
@@ -51,20 +62,37 @@ jobs:
       - run:
           name: System dependencies
           command: |
-            apt-get update
-            apt-get install -y virtualenv
-            apt-get install -y git cmake make build-essential libgtest-dev
-      - run:
-          name: Fetch code dependencies
-          command: |
-            git submodule sync
-            git submodule update --init
+            PKG='apt-get install -y --no-install-recommends'
+            set -ex
+            export DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true
+            echo "tzdata tzdata/Areas select Europe" > /tmp/preseed.txt
+            echo "tzdata tzdata/Zones/Europe select Brussels" >> /tmp/preseed.txt
+            debconf-set-selections /tmp/preseed.txt
+            apt-get update -q
+            $PKG tzdata git libgtest-dev
+            $PKG pkg-config cmake make build-essential m4 autotools-dev autoconf automake libtool
+            $PKG virtualenv
+            $PKG yasm nasm
       - run:
           name: Python dependencies
           command: |
             virtualenv /tmp/env
             source /tmp/env/bin/activate
             pip install --upgrade cpplint
+      - run:
+          name: Fetch code dependencies
+          command: |
+            git submodule sync
+            git submodule update --init
+      - run:
+          name: Build isa-l_crypto
+          command: |
+            set -ex
+            cd vendor/isa-l_crypto
+            ./autogen.sh
+            ./configure --prefix=/usr --enable-shared --enable-static --no-create --no-recursion
+            make
+            sudo make install
       - run:
           name: Build and Test
           command: |
