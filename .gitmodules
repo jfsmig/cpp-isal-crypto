@@ -1,4 +1,0 @@
-[submodule "vendor/isa-l_crypto"]
-	path = vendor/isa-l_crypto
-	url = https://github.com/intel/isa-l_crypto
-	branch = master
