@@ -15,6 +15,8 @@ digraph g {
 	Computing_Last;
 
 	Idle -> Ready_First [label = "reserve()"];
+	Idle -> Idle [label = "Update()"; color = red;];
+	Idle -> Idle [label = "Finish()"; color = red;];
 
 	Ready_First -> Queued_First [label = "Update()"];
 	Ready_First -> Queued_Whole [label = "Finish()"];
