@@ -25,27 +25,28 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O2")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2")
 set(CMAKE_CXX_FLAGS_MINSIZEREL "-Os")
 
-pkg_search_module(ISAL REQUIRED libisal_crypto)
+pkg_search_module(ISALCRYPTO REQUIRED libisal_crypto)
 pkg_search_module(GLOG REQUIRED libglog)
 
+add_subdirectory(/usr/src/googletest ${CMAKE_BINARY_DIR}/gtest EXCLUDE_FROM_ALL)
+
 include_directories(
-		${ISAL_INCLUDE_DIRS}
+		${ISALCRYPTO_INCLUDE_DIRS}
 		${GLOG_INCLUDE_DIRS})
 
 link_directories(
-		${ISAL_LIBRARY_DIRS}
+		${ISALCRYPTO_LIBRARY_DIRS}
 		${GLOG_LIBRARY_DIRS})
 
 add_library(cpp-isal-crypto SHARED
 		src/hash_isal_md5.cpp)
 target_link_libraries(cpp-isal-crypto
-		/usr/local/lib/libisal_crypto.a
+		${ISALCRYPTO_LIBRARIES}
 		${GLOG_LIBRARIES}
 		${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(test-cpp-isal-crypto
 		test/test_hash_isal_md5.cpp)
-
 target_link_libraries(test-cpp-isal-crypto
 		gtest
 		cpp-isal-crypto

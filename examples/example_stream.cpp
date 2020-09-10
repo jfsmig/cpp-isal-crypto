@@ -10,9 +10,11 @@
 
 using hash::md5::isal::SchedulerInterface;
 using hash::md5::isal::Stream;
-using hash::StringBuffer;
+using hash::StringPtr;
 
 #define N 8
+
+static StringPtr buffer(new std::string(8192, ':'));
 
 int main(int argc, char **argv) {
   (void) argc, (void) argv;
@@ -29,7 +31,7 @@ int main(int argc, char **argv) {
   uint32_t i{0};
   std::string line;
   while (std::getline(std::cin, line)) {
-    auto buf = std::make_shared<StringBuffer>(line);
+    auto buf = std::make_shared<std::string>(line);
     for (typeof(i) j{0}; j < N && j <= i; j++)
       streams[j]->Update(buf);
     i++;

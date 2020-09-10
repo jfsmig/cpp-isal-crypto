@@ -11,13 +11,14 @@
 
 #include "../src/hash_isal_md5.hpp"
 
-static std::array<uint8_t, 8192> blob;
+using hash::md5::isal::SchedulerInterface;
+using hash::md5::isal::Stream;
+using hash::StringPtr;
 
-static std::shared_ptr<hash::StaticBuffer> buffer(
-    new hash::StaticBuffer(blob.data(), blob.size()));
+static StringPtr buffer(new std::string(8192, ':'));
 
 TEST(MD5, SimpleRun) {
-  auto server = hash::md5::isal::SchedulerInterface::New();
+  auto server = SchedulerInterface::New();
   auto client = server->MakeStream();
   client->Update(buffer);
   auto rc = client->Finish();

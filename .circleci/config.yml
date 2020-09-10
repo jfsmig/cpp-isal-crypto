@@ -24,8 +24,6 @@ jobs:
     executor: << parameters.os >>
     steps:
       - checkout
-      - run: git submodule sync
-      - run: git submodule update --init
       - run:
           name: System dependencies
           command: |
@@ -39,6 +37,8 @@ jobs:
             $PKG tzdata git libgtest-dev
             $PKG pkg-config cmake make build-essential m4 autotools-dev autoconf automake libtool
             $PKG yasm nasm
+      - run: git submodule sync
+      - run: git submodule update --init
       - run:
           name: Build isa-l_crypto
           command: |

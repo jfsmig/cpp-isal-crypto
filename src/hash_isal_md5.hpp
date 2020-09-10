@@ -18,51 +18,7 @@
 
 namespace hash {
 
-class Buffer {
- public:
-  virtual ~Buffer() {}
-
-  Buffer(const Buffer &o) = delete;
-
-  Buffer(Buffer &&o) = delete;
-
-  virtual uint8_t *data() = 0;
-
-  virtual size_t size() = 0;
-
- protected:
-  Buffer() = default;
-};
-
-struct StaticBuffer : public Buffer {
-  uint8_t *data() { return data_; }
-
-  size_t size() { return size_; }
-
-  ~StaticBuffer() {}
-
-  StaticBuffer() = delete;
-
-  StaticBuffer(uint8_t *b, size_t s) : data_{b}, size_{s} {}
-
-  uint8_t *data_;
-  size_t size_;
-};
-
-struct StringBuffer : public Buffer {
-  uint8_t *data() { return reinterpret_cast<uint8_t *>(sub_.data()); }
-
-  size_t size() { return sub_.size(); }
-
-  ~StringBuffer() {}
-
-  StringBuffer() = delete;
-
-  explicit StringBuffer(std::string s) : sub_(s) {}
-
-  std::string sub_;
-};
-
+using StringPtr = std::shared_ptr<std::string>;
 
 namespace md5 {
 namespace isal {
@@ -84,7 +40,7 @@ class Stream {
 
   ~Stream();
 
-  void Update(std::shared_ptr<Buffer> b);
+  void Update(StringPtr b);
 
   std::future<std::string> Finish();
 
@@ -116,7 +72,7 @@ class SchedulerInterface {
 
   SchedulerInterface(SchedulerInterface &&o) = delete;
 
-  virtual void stream_update(uint32_t id, std::shared_ptr<Buffer> buffer) = 0;
+  virtual void stream_update(uint32_t id, StringPtr b) = 0;
 
   virtual std::future<std::string> stream_finish(uint32_t id) = 0;
 

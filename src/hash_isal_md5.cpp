@@ -7,52 +7,116 @@
 #include <exception>
 #include "glog/logging.h"
 
-using hash::Buffer;
+using hash::StringPtr;
 using hash::md5::isal::Stream;
 using hash::md5::isal::SchedulerInterface;
 
 enum class State {
-  // Ready to be Reserved to a stream
+  // Unused stream.
+  // The only allowed action is to reserve it to a stream.
   Idle = 0,
 
-  // Reserved to a stream but not initiated yet
-  // Out of the waiting line
-  Reserved,
+  // -------------------------------------------------------------------------
+  // All the Ready_* states have in common that the stream has no pending data,
+  // thus it cannot be in the waiting queue.
+  // -------------------------------------------------------------------------
 
-  // Reserved to a stream but not initiated yet
-  // In the waiting line
-  Reserved_Waiting,
+  // Not initiated yet, upon the next block it will be necessary to initiate
+  // the checksum structure.
+  Ready_First = 1,
 
-  // Reserved to a stream, initiated but no computation active
-  // Out of the waiting line
-  Ready,
+  // Already initiated yet, upon the next block it is only necessary to update
+  // the checksum structure.
+  Ready_Update = 2,
 
-  // Reserved to a stream, initiated but no computation active
-  // In the waiting line
-  Ready_Waiting,
+  // -------------------------------------------------------------------------
+  // All the Queued_* states have in common that the stream is waiting in the
+  // queue for a computing slot, ad they should have a non-empty queue of
+  // pending blocks.
+  // -------------------------------------------------------------------------
 
-  // Reserved to a stream, a (first / middle) computation is currently running
-  Active,
+  // First block received (the queue might contain more). The computation will
+  // apply the ~FIRST call to initiate the checksum structure on the first
+  // item of the queue of pending blocks.
+  Queued_First = 3,
 
-  // Reserved to a stream, a (last) computation is currently running
-  Finishing,
+  // Middle block received (the queue length might be longer than 1). The next
+  // computation will just ~UPDATE the checksum structure.
+  Queued_Update = 4,
 
-  // Reserved to a stream, no computation pending, no new data
-  // accepted.
-  Finished,
+  // Last block received (the queue length might be longer than 1). If the size
+  // of the queue is 1, the next computation will apply the ~LAST call on the
+  // checksum structure. Otherwise, the computation will apply the ~UPDATE call
+  // on the first element of the queue.
+  Queued_Last = 5,
+
+  // Last block received on a stream tha has not been initiated yet. In other
+  // words, the whole content is in the queue of pending blocks (whose length
+  // might be greater than 1). The implementation will chain calls with FIRST,
+  // UPDATE, LAST if the size of the queue is > 1, and will apply a single WHOLE
+  // call of the size is exactly 1.
+  Queued_Whole = 6,
+
+  // -------------------------------------------------------------------------
+  // All the Computing_* states share that a computation is pending on the
+  // current stream. They must not be in the queue of waiting blocks.
+  // -------------------------------------------------------------------------
+
+  // The computation happens on a stream that didn't received the final blocks
+  // yet. Thus when the computation will end, depending on the presence of
+  // pending blocks, the stream will return in a Ready_Update of a Queued_Update
+  // state.
+  Computing_Update = 7,
+
+  // The computation happens on a stream that received its final block. When
+  // the computation will end, the stream will return in either the Ready_Last
+  // or the Queued_Last, depending on the availability of blocks in the pending
+  // queue.
+  Computing_Last = 8,
+
+  // -------------------------------------------------------------------------
+
+  // The checksum is complete, the stream must not appear in the waiting line
+  // for a computation. Neither should it have pending blocks.
+  // The digest is available and the stream is ready to be released.
+  Finished = 9,
 };
+
+static StringPtr empty = std::make_shared<std::string>("");
 
 class Scheduler;
 
 struct StreamEntry {
   MD5_HASH_CTX hasher_;
-  State state_;
   uint32_t index_;
-  std::queue<std::shared_ptr<Buffer>> pending_blocks_;
-  std::shared_ptr<Buffer> current_block_;
+  State state_;
+  std::queue<StringPtr> pending_blocks_;
   std::promise<std::string> result_;
 
   StreamEntry() : hasher_{}, state_{State::Idle} { hasher_.user_data = this; }
+
+  void check() const {
+    assert(this == hasher_.user_data);
+    switch (state_) {
+      case State::Idle:
+      case State::Ready_First:
+      case State::Ready_Update:
+      case State::Finished:
+        assert(pending_blocks_.empty());
+        return;
+      case State::Queued_First:
+      case State::Queued_Update:
+      case State::Queued_Last:
+      case State::Queued_Whole:
+      case State::Computing_Update:
+      case State::Computing_Last:
+        assert(!pending_blocks_.empty());
+        return;
+      default:
+        assert(state_ >= State::Idle && state_ <= State::Finished);
+        abort();
+    }
+  }
 };
 
 class Scheduler : public SchedulerInterface {
@@ -64,7 +128,7 @@ class Scheduler : public SchedulerInterface {
   std::shared_ptr<Stream> MakeStream() override;
 
  protected:
-  void stream_update(uint32_t id, std::shared_ptr<Buffer> buffer) override;
+  void stream_update(uint32_t id, StringPtr b) override;
 
   std::future<std::string> stream_finish(uint32_t id) override;
 
@@ -113,7 +177,7 @@ class Scheduler : public SchedulerInterface {
   std::unique_lock<std::mutex> lock_;
   std::condition_variable barrier_;
 
-  std::array<StreamEntry, 1024> streams_;
+  std::array<StreamEntry, 8192> streams_;
   std::queue<uint32_t> streams_indexes_pending_;
   std::queue<uint32_t> streams_indexes_idle_;
 
@@ -133,7 +197,7 @@ std::future<std::string> Stream::Finish() {
   return scheduler_->stream_finish(index_);
 }
 
-void Stream::Update(std::shared_ptr<Buffer> b) {
+void Stream::Update(StringPtr b) {
   return scheduler_->stream_update(index_, std::move(b));
 }
 
@@ -227,30 +291,31 @@ void Scheduler::background_stream_trigger_first() {
 
 void Scheduler::background_stream_trigger(StreamEntry *stream) {
   MD5_HASH_CTX *ctx{nullptr};
-  std::shared_ptr<Buffer> buf;
+  StringPtr buf;
   StreamEntry *done{nullptr};
   auto flags{HASH_UPDATE};
 
   LOG(ERROR) << __func__;
-  assert(stream == stream->hasher_.user_data);
+  stream->check();
 
   switch (stream->state_) {
     case State::Idle:
-    case State::Active:
-    case State::Finishing:
+    case State::Computing_Update:
+    case State::Computing_Last:
     case State::Finished:
       throw std::logic_error("BUG: no activity expected");
 
-    case State::Reserved:
-    case State::Ready:
+    case State::Ready_First:
+    case State::Ready_Update:
       throw std::logic_error("BUG: not waiting in the line");
 
-    case State::Reserved_Waiting:
+    case State::Queued_First:
       flags = HASH_FIRST;
       // FALLTHROUGH
-    case State::Ready_Waiting:
-      assert(stream->current_block_.get() != nullptr);
-      stream->state_ = State::Active;
+    case State::Queued_Whole:
+    case State::Queued_Last:
+    case State::Queued_Update:
+      stream->state_ = State::Computing_Update;
       ctx = md5_ctx_mgr_submit(&manager_, &stream->hasher_,
                                buf->data(), buf->size(), flags);
       done = reinterpret_cast<StreamEntry *>(ctx->user_data);
@@ -264,18 +329,17 @@ void Scheduler::background_stream_trigger(StreamEntry *stream) {
 void Scheduler::background_stream_completion(StreamEntry *stream) {
   assert(nb_streams_active_ > 0);
   nb_streams_active_--;
-  stream->current_block_.reset();
 
   switch (stream->state_) {
-    case State::Finishing:
+    case State::Queued_Last:
       assert(stream->pending_blocks_.empty());
       stream->state_ = State::Finished;
       return;
-    case State::Active:
+    case State::Computing_Update:
       if (stream->pending_blocks_.empty()) {
-        stream->state_ = State::Ready;
+        stream->state_ = State::Ready_Update;
       } else {
-        stream->state_ = State::Ready_Waiting;
+        stream->state_ = State::Queued_Update;
         streams_indexes_pending_.push(stream->index_);
       }
       return;
@@ -311,69 +375,111 @@ void Scheduler::background_wait_for_poke() {
   barrier_.wait(lock_);
 }
 
-void Scheduler::stream_update(uint32_t id, std::shared_ptr<Buffer> buffer) {
+void Scheduler::stream_update(uint32_t id, StringPtr b) {
   auto &stream = streams_.at(id);
+  stream.check();
+  poke();
   switch (stream.state_) {
     case State::Idle:
       throw std::logic_error("BUG: update() not allowed on idle stream");
 
-    case State::Reserved:
-      stream.state_ = State::Reserved_Waiting;
+    case State::Ready_First:
+      stream.state_ = State::Queued_First;
       streams_indexes_pending_.push(stream.index_);
-      // FALLTHROUGH
-    case State::Reserved_Waiting:
-      stream.pending_blocks_.push(std::move(buffer));
-      poke();
-      return;
+      return stream.pending_blocks_.push(std::move(b));
 
-    case State::Ready:
-      stream.state_ = State::Ready_Waiting;
-      stream.pending_blocks_.push(std::move(buffer));
-      // FALLTHROUGH
-    case State::Ready_Waiting:
-      stream.pending_blocks_.push(std::move(buffer));
-      poke();
-      return;
+    case State::Ready_Update:
+      stream.state_ = State::Queued_Update;
+      streams_indexes_pending_.push(stream.index_);
+      return stream.pending_blocks_.push(std::move(b));
 
-    case State::Active:
-      stream.pending_blocks_.push(std::move(buffer));
-      return;
+    case State::Queued_First:
+    case State::Queued_Update:
+      return stream.pending_blocks_.push(std::move(b));
 
-    case State::Finishing:
+    case State::Queued_Last:
+    case State::Queued_Whole:
+      throw std::logic_error("BUG: update() not allowed on finishing stream");
+
+    case State::Computing_Update:
+      return stream.pending_blocks_.push(std::move(b));
+
+    case State::Computing_Last:
       throw std::logic_error("BUG: update() not allowed on finishing stream");
 
     case State::Finished:
       throw std::logic_error("BUG: update() not allowed on finished stream");
   }
+
+  throw std::logic_error("BUG: update() on unhandled state");
 }
 
 std::future<std::string> Scheduler::stream_finish(uint32_t id) {
   LOG(ERROR) << __func__;
-  // return streams_.at(id).result_.get_future();
   auto &stream = streams_.at(id);
-  (void) stream;
-  throw std::logic_error("NYI");
+  stream.check();
+  switch (stream.state_) {
+    case State::Idle:
+      throw std::logic_error("BUG: finish() not allowed on idle stream");
+
+    case State::Ready_First:
+      stream.state_ = State::Queued_Whole;
+      stream.pending_blocks_.push(empty);
+      streams_indexes_pending_.push(stream.index_);
+      return stream.result_.get_future();
+
+    case State::Ready_Update:
+      stream.state_ = State::Queued_Last;
+      stream.pending_blocks_.push(empty);
+      streams_indexes_pending_.push(stream.index_);
+      return stream.result_.get_future();
+
+    case State::Queued_First:
+      stream.state_ = State::Queued_Whole;
+      return stream.result_.get_future();
+
+    case State::Queued_Update:
+      stream.state_ = State::Queued_Whole;
+      return stream.result_.get_future();
+
+    case State::Queued_Last:
+    case State::Queued_Whole:
+      throw std::logic_error("BUG: finish() not allowed on finishing stream");
+
+    case State::Computing_Update:
+      stream.state_ = State::Computing_Last;
+      return stream.result_.get_future();
+
+    case State::Computing_Last:
+      throw std::logic_error("BUG: finish() not allowed on finishing stream");
+
+    case State::Finished:
+      throw std::logic_error("BUG: finish() not allowed on finished stream");
+  }
+  throw std::logic_error("BUG: finish() on unhandled state");
 }
 
 void Scheduler::stream_release(uint32_t id) {
   LOG(ERROR) << __func__;
   auto &stream = streams_.at(id);
+  stream.check();
   switch (stream.state_) {
     case State::Idle:
-      throw std::logic_error("BUG: cannot release an idle stream");
-    case State::Active:
-    case State::Finishing:
-      throw std::logic_error("NYI: releasing a stream while active");
-    case State::Ready_Waiting:
-    case State::Reserved_Waiting:
-      throw std::logic_error("NYI: releasing a stream while waiting");
-    case State::Ready:
-    case State::Reserved:
+      throw std::logic_error("BUG: release() on an idle stream");
+    case State::Queued_First:
+    case State::Queued_Update:
+    case State::Queued_Last:
+    case State::Queued_Whole:
+    case State::Computing_Update:
+    case State::Computing_Last:
+      stream_finish(id).wait();
+      // FALLTHROUGH
+    case State::Ready_First:
+    case State::Ready_Update:
     case State::Finished:
-      while (!stream.pending_blocks_.empty())
-        stream.pending_blocks_.pop();
-      stream.current_block_.reset();
+      stream.check();
       stream.state_ = State::Idle;
       return;
   }
+  throw std::logic_error("BUG: release() on unhandled state");
 }

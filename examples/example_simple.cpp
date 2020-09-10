@@ -10,14 +10,11 @@
 
 using hash::md5::isal::SchedulerInterface;
 using hash::md5::isal::Stream;
-using hash::StringBuffer;
+using hash::StringPtr;
 
 #define N 1024
 
-static std::array<uint8_t, 8192> blob;
-
-static std::shared_ptr<hash::StaticBuffer> buffer(
-    new hash::StaticBuffer(blob.data(), blob.size()));
+static StringPtr buffer(new std::string(8192, ':'));
 
 int main(int argc, char **argv) {
   (void) argc, (void) argv;
