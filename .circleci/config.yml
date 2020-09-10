@@ -34,25 +34,24 @@ jobs:
             echo "tzdata tzdata/Zones/Europe select Brussels" >> /tmp/preseed.txt
             debconf-set-selections /tmp/preseed.txt
             apt-get update -q
-            $PKG tzdata git libgtest-dev
+            $PKG tzdata 
             $PKG pkg-config cmake make build-essential m4 autotools-dev autoconf automake libtool
             $PKG yasm nasm
-      - run: git submodule sync
-      - run: git submodule update --init
+            $PKG libgtest-dev libgoogle-glog-dev libgoogle-glog0v5
       - run:
           name: Build isa-l_crypto
           command: |
             set -ex
             cd vendor/isa-l_crypto
             ./autogen.sh
-            ./configure --prefix=/usr --enable-shared --enable-static --no-create --no-recursion
-            make
-            sudo make install
+            ./configure --prefix=/usr --enable-shared --enable-static
+            make -j $(nproc --ignore=1)
+            make install
       - run:
           name: Build and Test
           command: |
             cmake .
-            make
+            make -j 4
             make test
   linter:
     docker:
@@ -69,10 +68,11 @@ jobs:
             echo "tzdata tzdata/Zones/Europe select Brussels" >> /tmp/preseed.txt
             debconf-set-selections /tmp/preseed.txt
             apt-get update -q
-            $PKG tzdata git libgtest-dev
+            $PKG tzdata
             $PKG pkg-config cmake make build-essential m4 autotools-dev autoconf automake libtool
-            $PKG virtualenv
+            $PKG python virtualenv
             $PKG yasm nasm
+            $PKG libgtest-dev libgoogle-glog-dev libgoogle-glog0v5
       - run:
           name: Python dependencies
           command: |
@@ -80,22 +80,18 @@ jobs:
             source /tmp/env/bin/activate
             pip install --upgrade cpplint
       - run:
-          name: Fetch code dependencies
-          command: |
-            git submodule sync
-            git submodule update --init
-      - run:
           name: Build isa-l_crypto
           command: |
             set -ex
             cd vendor/isa-l_crypto
             ./autogen.sh
-            ./configure --prefix=/usr --enable-shared --enable-static --no-create --no-recursion
-            make
-            sudo make install
+            ./configure --prefix=/usr --enable-shared --enable-static
+            make -j $(nproc --ignore=1)
+            make install
       - run:
           name: Build and Test
           command: |
+            source /tmp/env/bin/activate
             cmake .
-            make
+            make -j 4
             make test
