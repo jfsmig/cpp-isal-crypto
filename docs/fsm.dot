@@ -1,0 +1,54 @@
+digraph g {
+	node [shape = doublecircle];
+	Idle;
+	Finished;
+	node [shape = circle, width = 2];
+	Ready_First;
+	Ready_Update;
+	node [shape = circle; color = green;];
+	Queued_First;
+	Queued_Update;
+	Queued_Last;
+	Queued_Whole;
+	node [shape = circle; color = blue;];
+	Computing_Update;
+	Computing_Last;
+
+	Idle -> Ready_First [label = "reserve()"];
+
+	Ready_First -> Queued_First [label = "Update()"];
+	Ready_First -> Queued_Whole [label = "Finish()"];
+
+	Ready_Update -> Queued_Update [label = "Update()"];
+	Ready_Update -> Queued_Last [label = "Finish()"];
+
+	Queued_First -> Queued_First [label = "Update()"];
+	Queued_First -> Queued_Whole [label = "Finish()"];
+	Queued_First -> Computing_Update [label = "bg_step()";];
+
+	Queued_Update -> Queued_Update [label = "Update()"];
+	Queued_Update -> Queued_Last [label = "Finish()"];
+	Queued_Update -> Computing_Update [label = "bg_step()";];
+
+	Queued_Last -> Queued_Last [label = "Update()"; color = red;];
+	Queued_Last -> Queued_Last [label = "Finish()"; color = red;];
+	Queued_Last -> Computing_Last [label = "bg_step()";];
+
+	Queued_Whole -> Queued_Whole [label = "Update()"; color = red;];
+	Queued_Whole -> Queued_Whole [label = "Finish()"; color = red;];
+	Queued_Whole -> Computing_Last [label = "bg_step()";];
+
+	Computing_Update -> Computing_Update [label = "Update()";];
+	Computing_Update -> Computing_Last [label = "Finish()";];
+	Computing_Update -> Ready_Update [label = "bg_step()"; comment = "empty queue";];
+	Computing_Update -> Queued_Update [label = "bg_step()"; comment = "filled queue"];
+
+	Computing_Last -> Computing_Last [label = "Update()"; color = red;];
+	Computing_Last -> Computing_Last [label = "Finish()"; color = red;];
+	Computing_Last -> Queued_Last [label = "bg_step()";];
+	Computing_Last -> Finished [label = "bg_step()";];
+
+	Finished -> Finished [label = "Update()"; color = red;];
+	Finished -> Finished [label = "Finish()"; color = red;];
+	Finished -> Idle [label = "release()";];
+}
