@@ -76,7 +76,9 @@ class SchedulerInterface {
 
   virtual std::future<std::string> stream_finish(uint32_t id) = 0;
 
-  virtual void stream_release(uint32_t id) = 0;
+  // Must no throw an exception upon a non-critical error since the function is used
+  // in destructors of RAII Stream objects
+  virtual void stream_release(uint32_t id) noexcept = 0;
 };
 
 }  // namespace isal

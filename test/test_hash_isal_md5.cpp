@@ -17,6 +17,34 @@ using hash::StringPtr;
 
 static StringPtr buffer(new std::string(8192, ':'));
 
+TEST(MD5, SchedulerInitRelease) {
+  SchedulerInterface::New();
+}
+
+TEST(MD5, StreamInitRelease) {
+  auto server = SchedulerInterface::New();
+  server->MakeStream();
+}
+
+TEST(MD5, StreamUpdateRelease) {
+  auto server = SchedulerInterface::New();
+  auto client = server->MakeStream();
+  client->Update(buffer);
+}
+
+TEST(MD5, StreamFinishRelease) {
+  auto server = SchedulerInterface::New();
+  auto client = server->MakeStream();
+  client->Finish();
+}
+
+TEST(MD5, StreamUpdateFinishRelease) {
+  auto server = SchedulerInterface::New();
+  auto client = server->MakeStream();
+  client->Update(buffer);
+  client->Finish();
+}
+
 TEST(MD5, SimpleRun) {
   auto server = SchedulerInterface::New();
   auto client = server->MakeStream();

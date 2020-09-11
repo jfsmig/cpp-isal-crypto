@@ -11,6 +11,8 @@ using hash::StringPtr;
 using hash::md5::isal::Stream;
 using hash::md5::isal::SchedulerInterface;
 
+static StringPtr empty = std::make_shared<std::string>("");
+
 enum class State {
   // Unused stream.
   // The only allowed action is to reserve it to a stream.
@@ -82,10 +84,12 @@ enum class State {
   Finished = 9,
 };
 
-static StringPtr empty = std::make_shared<std::string>("");
-
 class Scheduler;
 
+/**
+ * A StreamEntry is the footprint of a checksum computation in the Scheduler.
+ *
+ */
 struct StreamEntry {
   MD5_HASH_CTX hasher_;
   uint32_t index_;
@@ -94,6 +98,11 @@ struct StreamEntry {
   std::promise<std::string> result_;
 
   StreamEntry() : hasher_{}, state_{State::Idle} { hasher_.user_data = this; }
+
+  void check(State s) {
+    assert(state_ == s);
+    check();
+  }
 
   void check() const {
     assert(this == hasher_.user_data);
@@ -117,6 +126,11 @@ struct StreamEntry {
         abort();
     }
   }
+
+  void flush() {
+    while (!pending_blocks_.empty())
+      pending_blocks_.pop();
+  }
 };
 
 class Scheduler : public SchedulerInterface {
@@ -132,25 +146,20 @@ class Scheduler : public SchedulerInterface {
 
   std::future<std::string> stream_finish(uint32_t id) override;
 
-  void stream_release(uint32_t id) override;
+  void stream_release(uint32_t id) noexcept override;
 
  private:
-  /**
-   * Notify the background routine that there is a new buffer to be considered.
-   */
+  // Notify the background routine that there is a new buffer to be considered.
   void poke();
 
-  /* Main execution loop of the ISA-L core. Loop forwards to backround_step() */
+  // Main execution loop of the ISA-L core. Loop forwards to backround_step()
   void background_run();
 
-  /* Main execution routine, doing all the nasty stuff. */
+  // Main execution routine, doing all the nasty stuff.
   void backround_step();
 
-  /* Wait for a lane to become available in the ISA-L core. */
+  // Wait for a lane to become available in the ISA-L core.
   void background_wait_for_lane();
-
-  /* Wait for a poke() indicating that new data is available for any stream. */
-  void background_wait_for_poke();
 
   /**
    * Poll the next waiting client and forward the call to background_stream_trigger()
@@ -174,18 +183,17 @@ class Scheduler : public SchedulerInterface {
   MD5_HASH_CTX_MGR manager_;
 
   std::mutex mutex_;
-  std::unique_lock<std::mutex> lock_;
   std::condition_variable barrier_;
 
   std::array<StreamEntry, 8192> streams_;
   std::queue<uint32_t> streams_indexes_pending_;
   std::queue<uint32_t> streams_indexes_idle_;
 
-  uint32_t nb_streams_active_;
+  std::atomic<uint32_t> nb_computations_;
 
   uint32_t max_lanes_;
   std::thread worker_;
-  bool flag_running_;
+  std::atomic<bool> flag_running_;
 };
 
 
@@ -208,12 +216,13 @@ std::shared_ptr<SchedulerInterface> SchedulerInterface::New() {
 
 Scheduler::Scheduler() :
     manager_{},
-    mutex_(), lock_(mutex_), barrier_(),
+    mutex_(), barrier_(),
     streams_(), streams_indexes_pending_(), streams_indexes_idle_(),
-    nb_streams_active_{0},
+    nb_computations_{0},
     max_lanes_{MD5_MAX_LANES},
     worker_{},
     flag_running_{true} {
+  LOG(ERROR) << __func__;
   md5_ctx_mgr_init(&manager_);
   uint32_t i{0};
   for (auto &c : streams_) {
@@ -235,6 +244,11 @@ std::shared_ptr<Stream> Scheduler::MakeStream() {
   LOG(ERROR) << __func__;
   uint32_t idx = streams_indexes_idle_.back();
   streams_indexes_idle_.pop();
+
+  auto &stream = streams_.at(idx);
+  stream.check(State::Idle);
+  stream.state_ = State::Ready_First;
+
   return std::make_shared<Stream>(this, idx);
 }
 
@@ -260,16 +274,16 @@ void Scheduler::background_run() {
 
 void Scheduler::backround_step() {
   LOG(ERROR) << __func__;
-  std::lock_guard section(lock_);
-  if (nb_streams_active_ <= 0) {
+  std::unique_lock lock{mutex_};
+  if (nb_computations_ <= 0) {
     // If there is no active stream, then check there are pending streams
     // and if there is none, then wait for a notification
     if (streams_indexes_pending_.empty()) {
-      background_wait_for_poke();
-      assert(!streams_indexes_pending_.empty());
+      barrier_.wait(lock);
+    } else {
+      return background_stream_trigger_first();
     }
-    return background_stream_trigger_first();
-  } else if (nb_streams_active_ < max_lanes_) {
+  } else if (nb_computations_ < max_lanes_) {
     // Lanes remain, so we just try to start a new stream
     if (streams_indexes_pending_.empty()) {
       return background_wait_for_lane();
@@ -284,6 +298,8 @@ void Scheduler::backround_step() {
 
 void Scheduler::background_stream_trigger_first() {
   LOG(ERROR) << __func__;
+  if (streams_indexes_pending_.empty())
+    return;
   auto id = streams_indexes_pending_.front();
   streams_indexes_pending_.pop();
   return background_stream_trigger(&streams_.at(id));
@@ -327,8 +343,8 @@ void Scheduler::background_stream_trigger(StreamEntry *stream) {
 }
 
 void Scheduler::background_stream_completion(StreamEntry *stream) {
-  assert(nb_streams_active_ > 0);
-  nb_streams_active_--;
+  assert(nb_computations_ > 0);
+  nb_computations_--;
 
   switch (stream->state_) {
     case State::Queued_Last:
@@ -354,7 +370,7 @@ void Scheduler::background_wait_for_lane() {
     DECLARE_ALIGNED(MD5_HASH_CTX ctx, sizeof(void *));
     hash_ctx_init(&ctx);
 
-    nb_streams_active_++;
+    nb_computations_++;
     auto ptr = md5_ctx_mgr_submit(&manager_, &ctx, nullptr, 0, HASH_FIRST);
 
     if (ptr != nullptr) {
@@ -368,11 +384,6 @@ void Scheduler::background_wait_for_lane() {
     auto quantum = std::chrono::duration<int, std::micro>(100);
     std::this_thread::sleep_for(quantum);
   }
-}
-
-void Scheduler::background_wait_for_poke() {
-  LOG(ERROR) << __func__;
-  barrier_.wait(lock_);
 }
 
 void Scheduler::stream_update(uint32_t id, StringPtr b) {
@@ -439,7 +450,7 @@ std::future<std::string> Scheduler::stream_finish(uint32_t id) {
       return stream.result_.get_future();
 
     case State::Queued_Update:
-      stream.state_ = State::Queued_Whole;
+      stream.state_ = State::Queued_Last;
       return stream.result_.get_future();
 
     case State::Queued_Last:
@@ -459,27 +470,57 @@ std::future<std::string> Scheduler::stream_finish(uint32_t id) {
   throw std::logic_error("BUG: finish() on unhandled state");
 }
 
-void Scheduler::stream_release(uint32_t id) {
+void Scheduler::stream_release(uint32_t id) noexcept {
   LOG(ERROR) << __func__;
-  auto &stream = streams_.at(id);
-  stream.check();
-  switch (stream.state_) {
-    case State::Idle:
-      throw std::logic_error("BUG: release() on an idle stream");
-    case State::Queued_First:
-    case State::Queued_Update:
-    case State::Queued_Last:
-    case State::Queued_Whole:
-    case State::Computing_Update:
-    case State::Computing_Last:
-      stream_finish(id).wait();
-      // FALLTHROUGH
-    case State::Ready_First:
-    case State::Ready_Update:
-    case State::Finished:
-      stream.check();
-      stream.state_ = State::Idle;
-      return;
+
+  do {  // STEP 1
+    std::lock_guard lock{mutex_};
+    auto &stream = streams_.at(id);
+    stream.check();
+    try {
+      switch (stream.state_) {
+        case State::Idle:
+          throw std::logic_error("BUG: release() on an idle stream");
+        case State::Queued_First:
+        case State::Queued_Update:
+        case State::Queued_Last:
+        case State::Queued_Whole:
+          // The queue doesn't allow us to remove an element efficiently, so we void
+          // the computation order but we let it happen.
+          stream.flush();
+          stream.pending_blocks_.push(empty);
+          // FALLTHROUGH
+        case State::Computing_Update:
+        case State::Computing_Last:
+          break;
+
+        case State::Ready_First:
+        case State::Ready_Update:
+          stream.flush();
+          // FALLTHROUGH
+        case State::Finished:
+          stream.state_ = State::Idle;
+          return;
+      }
+      throw std::logic_error("BUG: release() on unhandled state");
+    } catch (std::logic_error &e) {
+      LOG(ERROR) << "Failed to release the stream " << id << ": " << e.what();
+    }
+  } while (0);
+
+  try {
+    stream_finish(id).wait();
+  } catch (std::logic_error &e) {
+    LOG(ERROR) << "Failed to release the stream " << id << ": " << e.what();
   }
-  throw std::logic_error("BUG: release() on unhandled state");
+
+  try {
+    std::lock_guard section{mutex_};
+    auto &stream = streams_.at(id);
+    stream.check(State::Finished);
+    stream.state_ = State::Idle;
+  } catch (std::logic_error &e) {
+    LOG(ERROR) << "Failed to release the stream " << id << ": " << e.what();
+  }
+
 }
