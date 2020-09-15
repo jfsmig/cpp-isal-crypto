@@ -11,7 +11,7 @@
 
 #include "../src/hash_isal_md5.hpp"
 
-using hash::md5::isal::SchedulerInterface;
+using hash::md5::isal::Scheduler;
 using hash::md5::isal::Stream;
 using hash::StringPtr;
 
@@ -19,39 +19,39 @@ static StringPtr buffer(new std::string(8192, ':'));
 
 // Early release
 TEST(MD5, SchedulerInitRelease) {
-  SchedulerInterface::New();
+  Scheduler::New();
 }
 
 // Early release
 TEST(MD5, StreamInitRelease) {
-  auto server = SchedulerInterface::New();
+  auto server = Scheduler::New();
   server->MakeStream();
 }
 
 // Early release
 TEST(MD5, StreamUpdateRelease) {
-  auto server = SchedulerInterface::New();
+  auto server = Scheduler::New();
   auto client = server->MakeStream();
   client->Update(buffer);
 }
 
 // Early release
 TEST(MD5, StreamFinishRelease) {
-  auto server = SchedulerInterface::New();
+  auto server = Scheduler::New();
   auto client = server->MakeStream();
   client->Finish();
 }
 
 // Early release
 TEST(MD5, StreamUpdateFinishRelease) {
-  auto server = SchedulerInterface::New();
+  auto server = Scheduler::New();
   auto client = server->MakeStream();
   client->Update(buffer);
   client->Finish();
 }
 
 TEST(MD5, SimpleRun) {
-  auto server = SchedulerInterface::New();
+  auto server = Scheduler::New();
   auto client = server->MakeStream();
   client->Update(buffer);
   auto rc = client->Finish();

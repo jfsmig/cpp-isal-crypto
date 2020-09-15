@@ -12,7 +12,7 @@
 
 #define N 1024
 
-using hash::md5::isal::SchedulerInterface;
+using hash::md5::isal::Scheduler;
 using hash::StringPtr;
 
 // Prepare a block to be pushed.
@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
   (void) argc, (void) argv;
 
   // Allocate the scheduler of our many streams
-  auto server = SchedulerInterface::New();
+  auto server = Scheduler::New();
 
   // Spawn many concurrent computations
   std::vector<std::thread> threads;

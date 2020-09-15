@@ -8,7 +8,7 @@
 
 #include "../src/hash_isal_md5.hpp"
 
-using hash::md5::isal::SchedulerInterface;
+using hash::md5::isal::Scheduler;
 using hash::md5::isal::Stream;
 using hash::StringPtr;
 
@@ -19,7 +19,7 @@ static StringPtr buffer(new std::string(8192, ':'));
 int main(int argc, char **argv) {
   (void) argc, (void) argv;
 
-  auto server = SchedulerInterface::New();
+  auto server = Scheduler::New();
 
   // Prepare N streams, one for each offset
   std::vector<std::shared_ptr<Stream>> streams;

@@ -6,8 +6,6 @@
 #ifndef HASH_ISAL_MD5_HPP_
 #define HASH_ISAL_MD5_HPP_
 
-#include <isa-l_crypto.h>
-
 #include <memory>
 #include <cassert>
 #include <utility>
@@ -23,62 +21,66 @@ using StringPtr = std::shared_ptr<std::string>;
 namespace md5 {
 namespace isal {
 
-class SchedulerInterface;
+class Stream;
+
+/**
+ * MD5 Scheduler for multiple streams.
+ */
+class Scheduler {
+ public:
+  virtual ~Scheduler() {}
+
+  virtual std::shared_ptr<Stream> MakeStream() = 0;
+
+  static std::shared_ptr<Scheduler> New();
+
+  virtual void UpdateStream(uint32_t id, StringPtr b) = 0;
+
+  virtual std::shared_future<std::string> FinishStream(uint32_t id) = 0;
+
+  /**
+   *
+   * @param id
+   */
+  virtual void ReleaseStream(uint32_t id) noexcept = 0;
+
+ protected:
+  Scheduler() {}
+
+  Scheduler(const Scheduler &o) = delete;
+
+  Scheduler(Scheduler &&o) = delete;
+};
 
 /**
  * Represents the hash computation of a single stream.
  */
 class Stream {
-  friend class SchedulerInterface;
-
  public:
   Stream() = delete;
 
-  Stream(Stream &&o) = delete;
-
   Stream(const Stream &o) = delete;
 
-  ~Stream();
+  Stream(Stream &&o) : scheduler_(o.scheduler_), index_{o.index_} {}
 
-  void Update(StringPtr b);
+  ~Stream() {
+    scheduler_->ReleaseStream(index_);
+  }
 
-  std::shared_future<std::string> Finish();
+  void Update(StringPtr b) {
+    return scheduler_->UpdateStream(index_, std::move(b));
+  }
 
-  explicit Stream(SchedulerInterface *srv, uint32_t index) :
+  std::shared_future<std::string> Finish() {
+    return scheduler_->FinishStream(index_);
+  }
+
+  explicit Stream(Scheduler *srv, uint32_t index) :
       scheduler_{srv}, index_{index} {}
 
  private:
-  SchedulerInterface *scheduler_;
+  Scheduler *scheduler_;
   uint32_t index_;
-};
-
-/**
- * MD5 Scheduler for multiple streams.
- */
-class SchedulerInterface {
-  friend class Stream;
-
- public:
-  virtual ~SchedulerInterface() {}
-
-  virtual std::shared_ptr<Stream> MakeStream() = 0;
-
-  static std::shared_ptr<SchedulerInterface> New();
-
- protected:
-  SchedulerInterface() {}
-
-  SchedulerInterface(const SchedulerInterface &o) = delete;
-
-  SchedulerInterface(SchedulerInterface &&o) = delete;
-
-  virtual void stream_update(uint32_t id, StringPtr b) = 0;
-
-  virtual std::shared_future<std::string> stream_finish(uint32_t id) = 0;
-
-  // Must no throw an exception upon a non-critical error since the function is used
-  // in destructors of RAII Stream objects
-  virtual void stream_release(uint32_t id) = 0;
 };
 
 }  // namespace isal
