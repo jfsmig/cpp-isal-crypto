@@ -18,45 +18,78 @@ using hash::StringPtr;
 static StringPtr buffer(new std::string(8192, ':'));
 
 // Early release
-TEST(MD5, SchedulerInitRelease) {
+TEST(MD5, Scheduler_Release_Init) {
   Scheduler::New();
 }
 
 // Early release
-TEST(MD5, StreamInitRelease) {
-  auto server = Scheduler::New();
-  server->MakeStream();
+TEST(MD5, Stream_Release_Init) {
+  auto sched = Scheduler::New();
+  sched->MakeStream();
 }
 
 // Early release
-TEST(MD5, StreamUpdateRelease) {
-  auto server = Scheduler::New();
-  auto client = server->MakeStream();
-  client->Update(buffer);
+TEST(MD5, Stream_Release_Update) {
+  auto sched = Scheduler::New();
+  auto hash = sched->MakeStream();
+  hash->Update(buffer);
 }
 
 // Early release
-TEST(MD5, StreamFinishRelease) {
-  auto server = Scheduler::New();
-  auto client = server->MakeStream();
-  client->Finish();
+TEST(MD5, Stream_Release_Finish) {
+  auto sched = Scheduler::New();
+  auto hash = sched->MakeStream();
+  hash->Finish();
 }
 
 // Early release
-TEST(MD5, StreamUpdateFinishRelease) {
-  auto server = Scheduler::New();
-  auto client = server->MakeStream();
-  client->Update(buffer);
-  client->Finish();
+TEST(MD5, Stream_Release_UpdateFinish) {
+  auto sched = Scheduler::New();
+  auto hash = sched->MakeStream();
+  hash->Update(buffer);
+  hash->Finish();
+}
+
+// Early destruction of the Scheduler
+TEST(MD5, Stream_EarlyDestruction_Init) {
+  Scheduler::New()->MakeStream();
+}
+
+// Early destruction of the Scheduler
+TEST(MD5, Stream_EarlyDestruction_Update) {
+  Scheduler::New()->MakeStream()->Update(buffer);
+}
+
+// Early destruction of the Scheduler
+TEST(MD5, Stream_EarlyDestruction_Finish) {
+  Scheduler::New()->MakeStream()->Finish();
+}
+
+// Early destruction of the Scheduler
+TEST(MD5, Stream_EarlyDestruction_UpdateFinish) {
+  Scheduler::New()->MakeStream()->Update(buffer).Finish();
 }
 
 TEST(MD5, SimpleRun) {
-  auto server = Scheduler::New();
-  auto client = server->MakeStream();
-  client->Update(buffer);
-  auto rc = client->Finish();
-  rc.wait();
-  std::cout << rc.get() << std::endl;
+  auto sched = Scheduler::New();
+  auto hash = sched->MakeStream();
+  hash->Update(buffer);
+  auto digest = hash->Finish();
+  digest.wait();
+  digest.get();
+}
+
+TEST(MD5, Short) {
+  auto hash = Scheduler::New()->MakeStream();
+  hash->Update(std::make_shared<std::string>("plop"));
+  ASSERT_EQ(hash->Finish().get(), "64a4e8faed1a1aa0bf8bf0fc84938d25");
+}
+
+TEST(MD5, ShortRepeated) {
+  auto hash = Scheduler::New()->MakeStream();
+  for (int i{0}; i < 64; i++)
+    hash->Update(std::make_shared<std::string>("plop"));
+  ASSERT_EQ(hash->Finish().get(), "1a6f3663f2766606e794c2d23477aab7");
 }
 
 int main(int argc, char **argv) {

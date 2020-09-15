@@ -5,6 +5,7 @@
 
 #include <iostream>
 #include <string>
+#include <utility>
 
 #include "../src/hash_isal_md5.hpp"
 
@@ -19,32 +20,28 @@ static StringPtr buffer(new std::string(8192, ':'));
 int main(int argc, char **argv) {
   (void) argc, (void) argv;
 
-  auto server = Scheduler::New();
+  auto sched = Scheduler::New();
 
   // Prepare N streams, one for each offset
-  std::vector<std::shared_ptr<Stream>> streams;
+  std::vector<std::unique_ptr<Stream>> hashes;
   for (int i{0}; i < N; i++)
-    streams.push_back(server->MakeStream());
+    hashes.emplace_back(sched->MakeStream());
 
-  // Feed the N streams, shere the stream 'i' starts
-  // checksuming at the line i-th line on the standard input.
-  uint32_t i{0};
+  // Feed the N streams, there the stream 'i' starts checksum'ing
+  // at the line i-th line on the standard input. Without data copies.
   std::string line;
-  while (std::getline(std::cin, line)) {
+  for (uint32_t i{0}; std::getline(std::cin, line); i++) {
     auto buf = std::make_shared<std::string>(line);
     for (typeof(i) j{0}; j < N && j <= i; j++)
-      streams[j]->Update(buf);
-    i++;
+      hashes[j]->Update(buf);
   }
 
   // Finish all the streams and then collect the results
-  std::vector<std::shared_future<std::string>> results;
-  for (auto &s : streams)
-    results.push_back(s->Finish());
-  // FIXME(jfs): should this work? currently it fails miserably.
-  streams.clear();
-  for (auto &rc : results)
-    std::cout << rc.get() << std::endl;
+  std::vector<std::shared_future<std::string>> digests;
+  for (auto &s : hashes)
+    digests.push_back(s->Finish());
+  for (auto &digest : digests)
+    std::cout << digest.get() << std::endl;
 
   return 0;
 }

@@ -19,12 +19,11 @@ static StringPtr buffer(new std::string(8192, ':'));
 int main(int argc, char **argv) {
   (void) argc, (void) argv;
 
-  auto server = Scheduler::New();
-  auto stream = server->MakeStream();
+  auto hash = Scheduler::New()->MakeStream();
   for (int i{0}; i < N; i++)
-    stream->Update(buffer);
-  auto rc = stream->Finish();
-  std::cout << rc.get() << std::endl;
+    hash->Update(buffer);
+  auto digest = hash->Finish();
+  std::cout << digest.get() << std::endl;
 
   return 0;
 }

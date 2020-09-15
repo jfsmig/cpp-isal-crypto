@@ -8,6 +8,7 @@
 #include <isa-l_crypto.h>
 
 #include <exception>
+#include <iomanip>
 #include <chrono>  // NOLINT
 
 using hash::StringPtr;
@@ -15,6 +16,8 @@ using hash::md5::isal::Stream;
 using hash::md5::isal::Scheduler;
 
 static StringPtr empty = std::make_shared<std::string>("");
+
+class SchedulerImpl;
 
 enum class State {
   // Unused stream.
@@ -87,27 +90,25 @@ enum class State {
   Finished = 9,
 };
 
-class SchedulerImpl;
-
 /**
  * A StreamEntry is the footprint of a checksum computation in the Scheduler.
  *
  */
 struct StreamEntry {
-  DECLARE_ALIGNED(MD5_HASH_CTX hasher_, sizeof(void*));
+  DECLARE_ALIGNED(MD5_HASH_CTX hasher_, sizeof(void *));
   uint32_t index_;
   State state_;
   std::queue<StringPtr> pending_blocks_;
   std::promise<std::string> result_;
   std::shared_future<std::string> result_future_;
 
-  StreamEntry() : hasher_{}, state_{State::Idle} {
+  StreamEntry() : hasher_{}, index_{0xFFFFFFFF}, state_{State::Idle} {
     hasher_.user_data = this;
   }
 
   ~StreamEntry() { flush(); }
 
-  void check(State s) {
+  void check(State s) const {
     assert(state_ == s);
     check();
   }
@@ -146,23 +147,24 @@ struct StreamEntry {
   }
 };
 
-class SchedulerImpl : public Scheduler {
+class SchedulerImpl :
+    public std::enable_shared_from_this<Scheduler>,
+    public Scheduler {
  public:
-  ~SchedulerImpl();
+  ~SchedulerImpl() override;
 
   SchedulerImpl();
 
+ private:
   std::unique_ptr<Stream> MakeStream() override;
 
- protected:
   void UpdateStream(uint32_t id, StringPtr b) override;
 
   std::shared_future<std::string> FinishStream(uint32_t id) override;
 
   void ReleaseStream(uint32_t id) noexcept override;
 
- private:
-  // Main execution loop of the ISA-L core. Loop forwards to backround_step()
+  // Main execution loop of the ISA-L core. Loop forwards to bg_step()
   void bg_run();
 
   // Main execution routine, doing all the nasty stuff.
@@ -171,7 +173,7 @@ class SchedulerImpl : public Scheduler {
   // Wait for a lane to become available in the ISA-L core.
   void bg_wait_for_lane();
 
-  // Poll the next waiting client and forward the call to background_stream_trigger()
+  // Poll the next waiting client and forward the call to bg_stream_trigger()
   void bg_stream_trigger_first();
 
   void bg_stream_compute(StreamEntry *stream, uint32_t flags, State next);
@@ -237,7 +239,7 @@ std::unique_ptr<Stream> SchedulerImpl::MakeStream() {
   stream.state_ = State::Ready_First;
   hash_ctx_init(&stream.hasher_);
 
-  return std::make_unique<Stream>(this, idx);
+  return std::make_unique<Stream>(shared_from_this(), idx);
 }
 
 void SchedulerImpl::UpdateStream(uint32_t id, StringPtr b) {
@@ -323,7 +325,7 @@ std::shared_future<std::string> SchedulerImpl::FinishStream(uint32_t id) {
 }
 
 void SchedulerImpl::ReleaseStream(uint32_t id) noexcept {
-  do {  // STEP 1
+  {  // STEP 1
     std::lock_guard lock{mutex_};
     auto &stream = streams_.at(id);
     stream.check();
@@ -353,18 +355,18 @@ void SchedulerImpl::ReleaseStream(uint32_t id) noexcept {
       default:
         abort();
     }
-  } while (0);
+  }
 
   FinishStream(id).wait();
 
   label_release:
-  do {
+  {
     std::lock_guard section{mutex_};
     auto &stream = streams_.at(id);
     stream.check(State::Finished);
     stream.state_ = State::Idle;
     streams_indexes_idle_.push(stream.index_);
-  } while (0);
+  }
 }
 
 void SchedulerImpl::bg_run() {
@@ -459,6 +461,8 @@ void SchedulerImpl::bg_stream_compute(
   return bg_stream_completion(done);
 }
 
+static std::string hexa(uint32_t bin[MD5_DIGEST_NWORDS]);
+
 void SchedulerImpl::bg_stream_completion(StreamEntry *stream) {
   assert(stream != nullptr);
   assert(nb_computations_ > 0);
@@ -478,9 +482,13 @@ void SchedulerImpl::bg_stream_completion(StreamEntry *stream) {
       return;
 
     case State::Computing_Last:
-      assert(stream->pending_blocks_.empty());
-      stream->state_ = State::Finished;
-      stream->result_.set_value("TODO");
+      if (stream->pending_blocks_.empty()) {
+        stream->state_ = State::Finished;
+        stream->result_.set_value(hexa(stream->hasher_.job.result_digest));
+      } else {
+        stream->state_ = State::Queued_Last;
+        streams_indexes_pending_.push(stream->index_);
+      }
       return;
 
     default:
@@ -495,4 +503,14 @@ void SchedulerImpl::bg_wait_for_lane() {
     if (stream != nullptr)
       return bg_stream_completion(stream);
   }
+}
+
+static std::string hexa(uint32_t bin[MD5_DIGEST_NWORDS]) {
+  std::stringstream ss;
+  uint8_t *b = reinterpret_cast<uint8_t *>(bin);
+  for (int i{0}; i < 4 * MD5_DIGEST_NWORDS; i++) {
+    const auto c = static_cast<unsigned int>(b[i]);
+    ss << std::hex << std::setw(2) << std::setfill('0') << c;
+  }
+  return ss.str();
 }

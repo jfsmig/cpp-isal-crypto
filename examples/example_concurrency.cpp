@@ -22,23 +22,22 @@ int main(int argc, char **argv) {
   (void) argc, (void) argv;
 
   // Allocate the scheduler of our many streams
-  auto server = Scheduler::New();
+  auto sched = Scheduler::New();
 
   // Spawn many concurrent computations
   std::vector<std::thread> threads;
   for (int i{0}; i < N; i++) {
-    threads.emplace_back([server]() {
-      auto client = server->MakeStream();
-      client->Update(buffer);
-      auto rc = client->Finish();
-      std::cout << rc.get() << std::endl;
+    threads.emplace_back([sched]() {
+      auto hash = sched->MakeStream();
+      hash->Update(buffer);
+      auto digest = hash->Finish();
+      std::cout << digest.get() << std::endl;
     });
   }
 
   // Wait for all the computation to terminate
   for (auto &th : threads)
     th.join();
-  threads.clear();
 
   return 0;
 }

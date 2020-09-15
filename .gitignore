@@ -2,6 +2,15 @@
 cmake-build-*/
 **/.*.swp
 
+CMakeCache.txt
+CMakeFiles/
+CTestTestfile.cmake
+Makefile
+cmake_install.cmake
+gtest/
+test-cpp-isal-crypto*
+
+
 # Prerequisites
 *.d
 

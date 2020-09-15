@@ -79,25 +79,27 @@ class Stream {
 
   Stream(const Stream &o) = delete;
 
-  Stream(Stream &&o) : scheduler_(o.scheduler_), index_{o.index_} {}
+  Stream(Stream &&o) :
+      scheduler_(std::move(o.scheduler_)), index_{o.index_} {}
+
+  explicit Stream(std::shared_ptr<Scheduler> srv, uint32_t index) :
+      scheduler_(std::move(srv)), index_{index} {}
 
   ~Stream() {
     scheduler_->ReleaseStream(index_);
   }
 
-  void Update(StringPtr b) {
-    return scheduler_->UpdateStream(index_, std::move(b));
+  Stream& Update(StringPtr b) {
+    scheduler_->UpdateStream(index_, std::move(b));
+    return *this;
   }
 
   std::shared_future<std::string> Finish() {
     return scheduler_->FinishStream(index_);
   }
 
-  explicit Stream(Scheduler *srv, uint32_t index) :
-      scheduler_{srv}, index_{index} {}
-
  private:
-  Scheduler *scheduler_;
+  std::shared_ptr<Scheduler> scheduler_;
   uint32_t index_;
 };
 
