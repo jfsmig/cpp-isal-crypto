@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
   }
 
   // Finish all the streams and then collect the results
-  std::vector<std::future<std::string>> results;
+  std::vector<std::shared_future<std::string>> results;
   for (auto &s : streams)
     results.push_back(s->Finish());
   // FIXME(jfs): should this work? currently it fails miserably.

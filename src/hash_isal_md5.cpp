@@ -103,6 +103,7 @@ struct StreamEntry {
   State state_;
   std::queue<StringPtr> pending_blocks_;
   std::promise<std::string> result_;
+  std::shared_future<std::string> result_future_;
 
   StreamEntry() : hasher_{}, state_{State::Idle} {
     hasher_.user_data = this;
@@ -142,6 +143,12 @@ struct StreamEntry {
     while (!pending_blocks_.empty())
       pending_blocks_.pop();
   }
+
+  std::shared_future<std::string> finish(State st) {
+    state_ = st;
+    result_future_ = result_.get_future();
+    return result_future_;
+  }
 };
 
 class Scheduler : public SchedulerInterface {
@@ -155,7 +162,7 @@ class Scheduler : public SchedulerInterface {
  protected:
   void stream_update(uint32_t id, StringPtr b) override;
 
-  std::future<std::string> stream_finish(uint32_t id) override;
+  std::shared_future<std::string> stream_finish(uint32_t id) override;
 
   void stream_release(uint32_t id) override;
 
@@ -220,7 +227,7 @@ Stream::~Stream() {
   }
 }
 
-std::future<std::string> Stream::Finish() {
+std::shared_future<std::string> Stream::Finish() {
   return scheduler_->stream_finish(index_);
 }
 
@@ -250,7 +257,8 @@ Scheduler::Scheduler() :
     c.index_ = i++;
     streams_indexes_idle_.push(c.index_);
   }
-  worker_ = std::thread([this]() { this->bg_run(); });
+
+  worker_ = std::thread([this]() { return this->bg_run(); });
 }
 
 Scheduler::~Scheduler() {
@@ -314,7 +322,7 @@ void Scheduler::stream_update(uint32_t id, StringPtr b) {
   throw std::logic_error("BUG: update() on unhandled state");
 }
 
-std::future<std::string> Scheduler::stream_finish(uint32_t id) {
+std::shared_future<std::string> Scheduler::stream_finish(uint32_t id) {
   TRACE_SCHEDULER() << " id=" << id;
   auto &stream = streams_.at(id);
   stream.check();
@@ -323,41 +331,33 @@ std::future<std::string> Scheduler::stream_finish(uint32_t id) {
       throw std::logic_error("BUG: finish() not allowed on idle stream");
 
     case State::Ready_First:
-      stream.state_ = State::Queued_Whole;
       stream.pending_blocks_.push(empty);
       streams_indexes_pending_.push(stream.index_);
-      return stream.result_.get_future();
+      return stream.finish(State::Queued_Whole);
 
     case State::Ready_Update:
-      stream.state_ = State::Queued_Last;
       stream.pending_blocks_.push(empty);
       streams_indexes_pending_.push(stream.index_);
-      return stream.result_.get_future();
+      return stream.finish(State::Queued_Last);
 
     case State::Queued_First:
-      stream.state_ = State::Queued_Whole;
-      return stream.result_.get_future();
+      return stream.finish(State::Queued_Whole);
 
     case State::Queued_Update:
-      stream.state_ = State::Queued_Last;
-      return stream.result_.get_future();
+      return stream.finish(State::Queued_Last);
+
+    case State::Computing_Update:
+      return stream.finish(State::Computing_Last);
 
     case State::Queued_Last:
     case State::Queued_Whole:
-      //throw std::logic_error("BUG: finish() not allowed on finishing stream");
-      return stream.result_.get_future();
-
-    case State::Computing_Update:
-      stream.state_ = State::Computing_Last;
-      return stream.result_.get_future();
-
     case State::Computing_Last:
-      throw std::logic_error("BUG: finish() not allowed on finishing stream");
-
     case State::Finished:
-      throw std::logic_error("BUG: finish() not allowed on finished stream");
+      return stream.result_future_;
+
+    default:
+      abort();
   }
-  throw std::logic_error("BUG: finish() on unhandled state");
 }
 
 void Scheduler::stream_release(uint32_t id) {
@@ -367,37 +367,37 @@ void Scheduler::stream_release(uint32_t id) {
     std::lock_guard lock{mutex_};
     auto &stream = streams_.at(id);
     stream.check();
-      switch (stream.state_) {
-        case State::Idle:
-          throw std::logic_error("BUG: release() on an idle stream");
+    switch (stream.state_) {
+      case State::Idle:
+        throw std::logic_error("BUG: release() on an idle stream");
 
-        case State::Queued_First:
-        case State::Queued_Update:
-        case State::Queued_Last:
-        case State::Queued_Whole:
-          // The queue doesn't allow us to remove an element efficiently, so we void
-          // the computation order but we let it happen.
-          stream.flush();
-          stream.pending_blocks_.push(empty);
-          // FALLTHROUGH
-        case State::Computing_Update:
-        case State::Computing_Last:
-          break;
+      case State::Queued_First:
+      case State::Queued_Update:
+      case State::Queued_Last:
+      case State::Queued_Whole:
+        // The queue doesn't allow us to remove an element efficiently, so we void
+        // the computation order but we let it happen.
+        stream.flush();
+        stream.pending_blocks_.push(empty);
+        // FALLTHROUGH
+      case State::Computing_Update:
+      case State::Computing_Last:
+        break;
 
-        case State::Ready_First:
-        case State::Ready_Update:
-          stream.state_ = State::Finished;
-          // FALLTHROUGH
-        case State::Finished:
-          goto label_release;
-        default:
-          abort();
-      }
+      case State::Ready_First:
+      case State::Ready_Update:
+        stream.state_ = State::Finished;
+        // FALLTHROUGH
+      case State::Finished:
+        goto label_release;
+      default:
+        abort();
+    }
   } while (0);
 
   stream_finish(id).wait();
 
-label_release:
+  label_release:
   do {
     std::lock_guard section{mutex_};
     auto &stream = streams_.at(id);
@@ -425,9 +425,9 @@ void Scheduler::bg_run() {
 
   // closing phase
   LOG(ERROR) << __func__ << " closing"
-                         << " nb_computations=" << nb_computations_
-                         << " #pending=" << streams_indexes_pending_.size()
-                         << " #lanes=" << max_lanes_;
+             << " nb_computations=" << nb_computations_
+             << " #pending=" << streams_indexes_pending_.size()
+             << " #lanes=" << max_lanes_;
 
   while (streams_indexes_idle_.size() != streams_.size()) {
     LOG(ERROR) << "closing"
@@ -437,9 +437,9 @@ void Scheduler::bg_run() {
   }
 
   LOG(ERROR) << __func__ << " exiting"
-                         << " nb_computations=" << nb_computations_
-                         << " #pending=" << streams_indexes_pending_.size()
-                         << " #lanes=" << max_lanes_;
+             << " nb_computations=" << nb_computations_
+             << " #pending=" << streams_indexes_pending_.size()
+             << " #lanes=" << max_lanes_;
 }
 
 void Scheduler::bg_step() {
