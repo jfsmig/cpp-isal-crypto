@@ -17,27 +17,32 @@ using hash::StringPtr;
 
 static StringPtr buffer(new std::string(8192, ':'));
 
+// Early release
 TEST(MD5, SchedulerInitRelease) {
   SchedulerInterface::New();
 }
 
+// Early release
 TEST(MD5, StreamInitRelease) {
   auto server = SchedulerInterface::New();
   server->MakeStream();
 }
 
+// Early release
 TEST(MD5, StreamUpdateRelease) {
   auto server = SchedulerInterface::New();
   auto client = server->MakeStream();
   client->Update(buffer);
 }
 
+// Early release
 TEST(MD5, StreamFinishRelease) {
   auto server = SchedulerInterface::New();
   auto client = server->MakeStream();
   client->Finish();
 }
 
+// Early release
 TEST(MD5, StreamUpdateFinishRelease) {
   auto server = SchedulerInterface::New();
   auto client = server->MakeStream();

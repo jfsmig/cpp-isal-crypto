@@ -9,6 +9,10 @@ enable_testing()
 
 set(CMAKE_CXX_STANDARD 17)
 
+set(SAN_CFLAGS "")
+set(SAN_CFLAGS "-fno-omit-frame-pointer -fno-inline -fstack-protector-all")
+set(SAN_CFLAGS "-fno-omit-frame-pointer -fsanitize=address")
+
 set(CMAKE_CXX_FLAGS "-g -fPIC -fPIE -pipe -Wall -Wextra -Werror")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=discarded-qualifiers")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=unused-variable")
@@ -19,11 +23,12 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wshadow")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wfloat-equal")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wcomment -Wparentheses")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wunsafe-loop-optimizations")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SAN_CFLAGS}")
 
-set(CMAKE_CXX_FLAGS_DEBUG "-O0 -fno-inline -fno-omit-frame-pointer -fstack-protector-all")
-set(CMAKE_CXX_FLAGS_RELEASE "-O2")
+set(CMAKE_CXX_FLAGS_DEBUG          "-O0")
+set(CMAKE_CXX_FLAGS_RELEASE        "-O2")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2")
-set(CMAKE_CXX_FLAGS_MINSIZEREL "-Os")
+set(CMAKE_CXX_FLAGS_MINSIZEREL     "-Os")
 
 pkg_search_module(ISALCRYPTO REQUIRED libisal_crypto)
 pkg_search_module(GLOG REQUIRED libglog)
