@@ -94,7 +94,7 @@ class SchedulerImpl;
  *
  */
 struct StreamEntry {
-  MD5_HASH_CTX hasher_;
+  DECLARE_ALIGNED(MD5_HASH_CTX hasher_, sizeof(void*));
   uint32_t index_;
   State state_;
   std::queue<StringPtr> pending_blocks_;
@@ -113,7 +113,6 @@ struct StreamEntry {
   }
 
   void check() const {
-    assert(this == hasher_.user_data);
     switch (state_) {
       case State::Idle:
       case State::Ready_First:
@@ -153,7 +152,7 @@ class SchedulerImpl : public Scheduler {
 
   SchedulerImpl();
 
-  std::shared_ptr<Stream> MakeStream() override;
+  std::unique_ptr<Stream> MakeStream() override;
 
  protected:
   void UpdateStream(uint32_t id, StringPtr b) override;
@@ -172,24 +171,15 @@ class SchedulerImpl : public Scheduler {
   // Wait for a lane to become available in the ISA-L core.
   void bg_wait_for_lane();
 
-  /**
-   * Poll the next waiting client and forward the call to background_stream_trigger()
-   */
+  // Poll the next waiting client and forward the call to background_stream_trigger()
   void bg_stream_trigger_first();
 
   void bg_stream_compute(StreamEntry *stream, uint32_t flags, State next);
 
-  /**
-   * Execute the next action of the given stream.
-   *
-   * @param stream a pointer to a valid stream, whose state must be "*_WAITING"
-   */
+  // Execute the next action of the given stream.
   void bg_stream_trigger(StreamEntry *stream);
 
-  /**
-   * Manage the result of a submitted job in the ISA-L scheduler.
-   * @param stream a pointer to a valid stream, whose state must tell it is ACTIVE/FINISHING
-   */
+  // Manage the result of a submitted job in the ISA-L scheduler.
   void bg_stream_completion(StreamEntry *stream);
 
  private:
@@ -198,7 +188,7 @@ class SchedulerImpl : public Scheduler {
   std::mutex mutex_;
   std::condition_variable barrier_;
 
-  std::array<StreamEntry, 8192> streams_;
+  std::array<StreamEntry, 256> streams_;
   std::queue<uint32_t> streams_indexes_pending_;
   std::queue<uint32_t> streams_indexes_idle_;
 
@@ -238,7 +228,7 @@ SchedulerImpl::~SchedulerImpl() {
   worker_.join();
 }
 
-std::shared_ptr<Stream> SchedulerImpl::MakeStream() {
+std::unique_ptr<Stream> SchedulerImpl::MakeStream() {
   uint32_t idx = streams_indexes_idle_.back();
   streams_indexes_idle_.pop();
 
@@ -247,7 +237,7 @@ std::shared_ptr<Stream> SchedulerImpl::MakeStream() {
   stream.state_ = State::Ready_First;
   hash_ctx_init(&stream.hasher_);
 
-  return std::make_shared<Stream>(this, idx);
+  return std::make_unique<Stream>(this, idx);
 }
 
 void SchedulerImpl::UpdateStream(uint32_t id, StringPtr b) {

@@ -28,14 +28,31 @@ class Stream;
  */
 class Scheduler {
  public:
-  virtual ~Scheduler() {}
-
-  virtual std::shared_ptr<Stream> MakeStream() = 0;
-
+  /**
+   * Instantiate a Scheduler implementation.
+   * The technique helps hiding the implementation details and prevents
+   * too many headers to be included.
+   *
+   * @return A shared_pointer to a valid Scheduler implementation.
+   */
   static std::shared_ptr<Scheduler> New();
 
+  virtual ~Scheduler() {}
+
+  virtual std::unique_ptr<Stream> MakeStream() = 0;
+
+  /**
+   *
+   * @param id
+   * @param b
+   */
   virtual void UpdateStream(uint32_t id, StringPtr b) = 0;
 
+  /**
+   *
+   * @param id
+   * @return
+   */
   virtual std::shared_future<std::string> FinishStream(uint32_t id) = 0;
 
   /**
@@ -53,7 +70,8 @@ class Scheduler {
 };
 
 /**
- * Represents the hash computation of a single stream.
+ * RAII of a single checksum computation.
+ *
  */
 class Stream {
  public:
