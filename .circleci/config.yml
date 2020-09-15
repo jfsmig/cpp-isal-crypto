@@ -52,6 +52,7 @@ jobs:
           command: |
             cmake .
             make -j 4
+            ./test-cpp-isal-crypto
             make test
   linter:
     docker:
@@ -94,4 +95,5 @@ jobs:
             source /tmp/env/bin/activate
             cmake .
             make -j 4
+            ./test-cpp-isal-crypto
             make test
