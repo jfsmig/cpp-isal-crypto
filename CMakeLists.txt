@@ -10,8 +10,9 @@ enable_testing()
 set(CMAKE_CXX_STANDARD 17)
 
 set(SAN_CFLAGS "")
-set(SAN_CFLAGS "-fno-omit-frame-pointer -fno-inline -fstack-protector-all")
-set(SAN_CFLAGS "-fno-omit-frame-pointer -fsanitize=address")
+#set(SAN_CFLAGS "-fno-omit-frame-pointer -fno-inline -fstack-protector-all")
+#set(SAN_CFLAGS "-fno-omit-frame-pointer -fsanitize=address")
+#set(SAN_CFLAGS "-fno-omit-frame-pointer -fsanitize=thread")
 
 set(CMAKE_CXX_FLAGS "-g -fPIC -fPIE -pipe -Wall -Wextra -Werror")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=discarded-qualifiers")
