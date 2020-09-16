@@ -11,12 +11,14 @@ executors:
 workflows:
   all-tests:
     jobs:
+      - linter
       - build:
+          requires:
+            - linter
           matrix:
             parameters:
               os: [ubuntu-focal, ubuntu-bionic]
-              build-type: [Release, Debug, MinSizeRel, RelWithDebInfo]
-      - linter
+              build-type: [Debug, Release, MinSizeRel]
 jobs:
   build:
     parameters:
