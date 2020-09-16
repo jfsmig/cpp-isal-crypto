@@ -15,12 +15,15 @@ workflows:
           matrix:
             parameters:
               os: [ubuntu-focal, ubuntu-bionic]
+              build-type: [Release, Debug, MinSizeRel, RelWithDebInfo]
       - linter
 jobs:
   build:
     parameters:
       os:
         type: executor
+      build-type:
+        type: string
     executor: << parameters.os >>
     steps:
       - checkout
@@ -50,9 +53,8 @@ jobs:
       - run:
           name: Build and Test
           command: |
-            cmake .
+            cmake -DCMAKE_BUILD_TYPE=<< parameters.build-type>> .
             make -j 4
-            ./test-cpp-isal-crypto
             make test
   linter:
     docker:
@@ -95,5 +97,4 @@ jobs:
             source /tmp/env/bin/activate
             cmake .
             make -j 4
-            ./test-cpp-isal-crypto
             make test
