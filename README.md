@@ -1,5 +1,7 @@
 # C++ wrapper for ``isa-l_crypto``
 
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/baa309c34cfe4868b3632b6dd87eada6)](https://app.codacy.com/manual/jfsmig/cpp-isal-crypto?utm_source=github.com&utm_medium=referral&utm_content=jfsmig/cpp-isal-crypto&utm_campaign=Badge_Grade_Dashboard)
+
 Attempt to make [isal-crypto] easy to use.
 
 Made with love by [the Authors](./AUTHORS.md).
