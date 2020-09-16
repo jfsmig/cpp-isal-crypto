@@ -2,12 +2,12 @@
 
 ## Individuals
 
-* Jean-Francois Smigielski [jfsmig]
+*   Jean-Francois Smigielski [jfsmig][]
 
 ## Corporate
 
-* [OpenIO][oio] SAS, via [jfsmig]
-* [OVHCloud][ovh], via [jfsmig]
+*   [OpenIO][oio] SAS, via [jfsmig]
+*   [OVHCloud][ovh], via [jfsmig]
 
 [jfsmig]: https://github.com/jfsmig
 [oio]: https://openio.io
