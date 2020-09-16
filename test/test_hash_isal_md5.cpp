@@ -92,6 +92,19 @@ TEST(MD5, ShortRepeated) {
   ASSERT_EQ(hash->Finish().get(), "1a6f3663f2766606e794c2d23477aab7");
 }
 
+TEST(MD5, ShortThreaded) {
+  std::vector<std::thread> threads;
+  auto sched = Scheduler::New();
+  auto short_string = std::make_shared<std::string>("plop");
+  for (int i{0}; i < 256; i++) {
+    threads.emplace_back([sched, short_string]() {
+      ASSERT_EQ(sched->Compute(short_string), "64a4e8faed1a1aa0bf8bf0fc84938d25");
+    });
+  }
+  for (auto &th : threads)
+    th.join();
+}
+
 int main(int argc, char **argv) {
   (void) argc;
 

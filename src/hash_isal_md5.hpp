@@ -39,6 +39,14 @@ class Scheduler {
 
   virtual ~Scheduler() {}
 
+  /**
+   * Synchronous computation.
+   *
+   * @param s
+   * @return
+   */
+  std::string Compute(StringPtr s);
+
   virtual std::unique_ptr<Stream> MakeStream() = 0;
 
   /**

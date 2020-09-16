@@ -109,6 +109,11 @@ struct StreamEntry {
   ~StreamEntry() { flush(); }
 
   void check(State s) const {
+    if (state_ != s) {
+      LOG(ERROR) << "BUG state"
+                 << " expected=" << static_cast<int>(s)
+                 << " actual=" << static_cast<int>(state_);
+    }
     assert(state_ == s);
     check();
   }
@@ -127,6 +132,10 @@ struct StreamEntry {
       case State::Queued_Whole:
       case State::Computing_Update:
       case State::Computing_Last:
+        if (pending_blocks_.empty()) {
+          LOG(ERROR) << "BUG empty queue with state"
+                     << " actual=" << static_cast<int>(state_);
+        }
         assert(!pending_blocks_.empty());
         return;
       default:
@@ -205,6 +214,10 @@ std::shared_ptr<Scheduler> Scheduler::New() {
   return std::make_shared<SchedulerImpl>();
 }
 
+std::string Scheduler::Compute(StringPtr s) {
+  return MakeStream()->Update(std::move(s)).Finish().get();
+}
+
 SchedulerImpl::SchedulerImpl() :
     manager_{},
     mutex_(), barrier_(),
@@ -214,13 +227,11 @@ SchedulerImpl::SchedulerImpl() :
     worker_{},
     flag_running_{true} {
   md5_ctx_mgr_init(&manager_);
-
   uint32_t i{0};
   for (auto &c : streams_) {
     c.index_ = i++;
     streams_indexes_idle_.push(c.index_);
   }
-
   worker_ = std::thread([this]() { return this->bg_run(); });
 }
 
@@ -231,8 +242,12 @@ SchedulerImpl::~SchedulerImpl() {
 }
 
 std::unique_ptr<Stream> SchedulerImpl::MakeStream() {
-  uint32_t idx = streams_indexes_idle_.back();
-  streams_indexes_idle_.pop();
+  uint32_t idx;
+  {
+    std::lock_guard lock(mutex_);
+    idx = streams_indexes_idle_.front();
+    streams_indexes_idle_.pop();
+  }
 
   auto &stream = streams_.at(idx);
   stream.check(State::Idle);
@@ -243,6 +258,8 @@ std::unique_ptr<Stream> SchedulerImpl::MakeStream() {
 }
 
 void SchedulerImpl::UpdateStream(uint32_t id, StringPtr b) {
+  std::lock_guard lock(mutex_);
+
   auto &stream = streams_.at(id);
   stream.check();
 
@@ -251,14 +268,14 @@ void SchedulerImpl::UpdateStream(uint32_t id, StringPtr b) {
       throw std::logic_error("BUG: update() not allowed on idle stream");
 
     case State::Ready_First:
+      stream.pending_blocks_.push(std::move(b));
       stream.state_ = State::Queued_First;
       streams_indexes_pending_.push(stream.index_);
-      stream.pending_blocks_.push(std::move(b));
       return barrier_.notify_one();
 
     case State::Ready_Update:
-      stream.state_ = State::Queued_Update;
       streams_indexes_pending_.push(stream.index_);
+      stream.state_ = State::Queued_Update;
       stream.pending_blocks_.push(std::move(b));
       return barrier_.notify_one();
 
@@ -286,8 +303,11 @@ void SchedulerImpl::UpdateStream(uint32_t id, StringPtr b) {
 }
 
 std::shared_future<std::string> SchedulerImpl::FinishStream(uint32_t id) {
+  std::lock_guard lock(mutex_);
+
   auto &stream = streams_.at(id);
   stream.check();
+
   switch (stream.state_) {
     case State::Idle:
       throw std::logic_error("BUG: finish() not allowed on idle stream");
@@ -327,12 +347,13 @@ std::shared_future<std::string> SchedulerImpl::FinishStream(uint32_t id) {
 void SchedulerImpl::ReleaseStream(uint32_t id) noexcept {
   {  // STEP 1
     std::lock_guard lock{mutex_};
+
     auto &stream = streams_.at(id);
     stream.check();
+
     switch (stream.state_) {
       case State::Idle:
         return;
-
       case State::Queued_First:
       case State::Queued_Update:
       case State::Queued_Last:
@@ -361,9 +382,11 @@ void SchedulerImpl::ReleaseStream(uint32_t id) noexcept {
 
   label_release:
   {
-    std::lock_guard section{mutex_};
+    std::lock_guard lock{mutex_};
+
     auto &stream = streams_.at(id);
     stream.check(State::Finished);
+
     stream.state_ = State::Idle;
     streams_indexes_idle_.push(stream.index_);
   }
@@ -507,7 +530,7 @@ void SchedulerImpl::bg_wait_for_lane() {
 
 static std::string hexa(uint32_t bin[MD5_DIGEST_NWORDS]) {
   std::stringstream ss;
-  uint8_t *b = reinterpret_cast<uint8_t *>(bin);
+  auto b = reinterpret_cast<uint8_t *>(bin);
   for (int i{0}; i < 4 * MD5_DIGEST_NWORDS; i++) {
     const auto c = static_cast<unsigned int>(b[i]);
     ss << std::hex << std::setw(2) << std::setfill('0') << c;
