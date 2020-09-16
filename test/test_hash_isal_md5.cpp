@@ -82,14 +82,16 @@ TEST(MD5, SimpleRun) {
 TEST(MD5, Short) {
   auto hash = Scheduler::New()->MakeStream();
   hash->Update(std::make_shared<std::string>("plop"));
-  ASSERT_EQ(hash->Finish().get(), "64a4e8faed1a1aa0bf8bf0fc84938d25");
+  ASSERT_EQ(hash->Finish().get(),
+            "64a4e8faed1a1aa0bf8bf0fc84938d25");
 }
 
 TEST(MD5, ShortRepeated) {
   auto hash = Scheduler::New()->MakeStream();
   for (int i{0}; i < 64; i++)
     hash->Update(std::make_shared<std::string>("plop"));
-  ASSERT_EQ(hash->Finish().get(), "1a6f3663f2766606e794c2d23477aab7");
+  ASSERT_EQ(hash->Finish().get(),
+            "1a6f3663f2766606e794c2d23477aab7");
 }
 
 TEST(MD5, ShortThreaded) {
@@ -98,7 +100,8 @@ TEST(MD5, ShortThreaded) {
   auto short_string = std::make_shared<std::string>("plop");
   for (int i{0}; i < 256; i++) {
     threads.emplace_back([sched, short_string]() {
-      ASSERT_EQ(sched->Compute(short_string), "64a4e8faed1a1aa0bf8bf0fc84938d25");
+      ASSERT_EQ(sched->Compute(short_string),
+                "64a4e8faed1a1aa0bf8bf0fc84938d25");
     });
   }
   for (auto &th : threads)
