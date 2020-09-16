@@ -50,24 +50,29 @@ TEST(MD5, Stream_Release_UpdateFinish) {
   hash->Finish();
 }
 
+// Produces a valid stream and forces the liberation of the Scheduler.
+std::unique_ptr<Stream> makeStream() {
+  return Scheduler::New()->MakeStream();
+}
+
 // Early destruction of the Scheduler
 TEST(MD5, Stream_EarlyDestruction_Init) {
-  Scheduler::New()->MakeStream();
+  makeStream();
 }
 
 // Early destruction of the Scheduler
 TEST(MD5, Stream_EarlyDestruction_Update) {
-  Scheduler::New()->MakeStream()->Update(buffer);
+  makeStream()->Update(buffer);
 }
 
 // Early destruction of the Scheduler
 TEST(MD5, Stream_EarlyDestruction_Finish) {
-  Scheduler::New()->MakeStream()->Finish();
+  makeStream()->Finish();
 }
 
 // Early destruction of the Scheduler
 TEST(MD5, Stream_EarlyDestruction_UpdateFinish) {
-  Scheduler::New()->MakeStream()->Update(buffer).Finish();
+  makeStream()->Update(buffer).Finish();
 }
 
 TEST(MD5, SimpleRun) {
