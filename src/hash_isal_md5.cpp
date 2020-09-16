@@ -171,7 +171,7 @@ class SchedulerImpl :
 
   std::shared_future<std::string> FinishStream(uint32_t id) override;
 
-  void ReleaseStream(uint32_t id) noexcept override;
+  void ReleaseStream(uint32_t id) override;
 
   // Main execution loop of the ISA-L core. Loop forwards to bg_step()
   void bg_run();
@@ -344,7 +344,7 @@ std::shared_future<std::string> SchedulerImpl::FinishStream(uint32_t id) {
   }
 }
 
-void SchedulerImpl::ReleaseStream(uint32_t id) noexcept {
+void SchedulerImpl::ReleaseStream(uint32_t id) {
   {  // STEP 1
     std::lock_guard lock{mutex_};
 

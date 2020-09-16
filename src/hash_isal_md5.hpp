@@ -67,7 +67,7 @@ class Scheduler {
    *
    * @param id
    */
-  virtual void ReleaseStream(uint32_t id) noexcept = 0;
+  virtual void ReleaseStream(uint32_t id) = 0;
 
  protected:
   Scheduler() {}
