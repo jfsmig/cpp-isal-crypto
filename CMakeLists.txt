@@ -106,12 +106,16 @@ if (CPPLINT_EXE)
             ${CPPLINT_EXE} --recursive --repository=${CMAKE_SOURCE_DIR} --root=src
             ${CMAKE_SOURCE_DIR}/src)
 
-    add_test(NAME format/test COMMAND
-            ${CPPLINT_EXE} --recursive --repository=${CMAKE_SOURCE_DIR} --root=test
-            ${CMAKE_SOURCE_DIR}/test)
-
     add_test(NAME format/examples COMMAND
             ${CPPLINT_EXE} --recursive --repository=${CMAKE_SOURCE_DIR} --root=examples
             ${CMAKE_SOURCE_DIR}/examples)
+
+    add_test(NAME format/test/test COMMAND
+            ${CPPLINT_EXE} --recursive --repository=${CMAKE_SOURCE_DIR} --root=test
+            ${CMAKE_SOURCE_DIR}/test/test*)
+
+    add_test(NAME format/test/benchmark COMMAND
+            ${CPPLINT_EXE} --filter=-runtime/references --recursive --repository=${CMAKE_SOURCE_DIR} --root=test
+            ${CMAKE_SOURCE_DIR}/test/benchmark*)
 
 endif ()

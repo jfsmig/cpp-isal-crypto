@@ -29,7 +29,8 @@ static void MD5_isal_Stream_Lifecycle(benchmark::State &state) {
 }
 
 
-static void upload_NStreams_1MiB(std::shared_ptr<Scheduler> sched, int nb, StringPtr buf) {
+static void upload_NStreams_1MiB(
+    std::shared_ptr<Scheduler> sched, int nb, StringPtr buf) {
   std::vector<std::unique_ptr<Hash>> hashes;
   for (int i{0}; i < nb; i++)
     hashes.emplace_back(sched->NewHash());
