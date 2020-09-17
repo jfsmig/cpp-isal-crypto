@@ -22,8 +22,8 @@ int main(int argc, char **argv) {
   auto hash = Scheduler::New()->NewHash();
   for (int i{0}; i < N; i++)
     hash->Update(buffer);
-  auto digest = hash->Finish();
-  std::cout << digest.get() << std::endl;
+  auto digest = hash->Finish().get();
+  std::cout << digest << std::endl;
 
   return 0;
 }

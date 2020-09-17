@@ -30,8 +30,8 @@ int main(int argc, char **argv) {
     threads.emplace_back([sched]() {
       auto hash = sched->NewHash();
       hash->Update(buffer);
-      auto digest = hash->Finish();
-      std::cout << digest.get() << std::endl;
+      auto digest = hash->Finish().get();
+      std::cout << digest << std::endl;
     });
   }
 

@@ -12,11 +12,11 @@ Made with love by [the Authors](./AUTHORS.md).
 ### Checksuming A Single Hash
 
 ```c++
-  auto hash = Scheduler::New()->MakeStream();
+  auto hash = Scheduler::New()->NewHash();
   for (int i{0}; i < N; i++)
     hash->Update(buffer);
-  auto digest = hash->Finish();
-  std::cout << digest.get() << std::endl;
+  auto digest = hash->Finish().get();
+  std::cout << digest << std::endl;
 ```
 
 ### Multiplexed checksums on stdin (mono-thread)
@@ -27,7 +27,7 @@ Made with love by [the Authors](./AUTHORS.md).
   // Prepare N streams, one for each offset
   std::vector<std::unique_ptr<Hash>> hashes;
   for (int i{0}; i < N; i++)
-    hashes.emplace_back(sched->MakeStream());
+    hashes.emplace_back(sched->NewHash());
 
   // Feed the N streams, there the stream 'i' starts checksum'ing
   // at the line i-th line on the standard input. Without data copies.
@@ -39,7 +39,7 @@ Made with love by [the Authors](./AUTHORS.md).
   }
 
   // Finish all the streams and then collect the results
-  std::vector<std::shared_future<std::string>> digests;
+  std::vector<Digest> digests;
   for (auto &s : hashes)
     digests.push_back(s->Finish());
   for (auto &digest : digests)
@@ -58,8 +58,8 @@ Made with love by [the Authors](./AUTHORS.md).
     threads.emplace_back([sched]() {
       auto hash = sched->MakeStream();
       hash->Update(buffer);
-      auto digest = hash->Finish();
-      std::cout << digest.get() << std::endl;
+      auto digest = hash->Finish().get();
+      std::cout << digest << std::endl;
     });
   }
 
