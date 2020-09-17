@@ -9,7 +9,7 @@ Made with love by [the Authors](./AUTHORS.md).
 
 ## Examples
 
-### Checksuming A Single Stream
+### Checksuming A Single Hash
 
 ```c++
   auto hash = Scheduler::New()->MakeStream();
@@ -25,7 +25,7 @@ Made with love by [the Authors](./AUTHORS.md).
   auto sched = Scheduler::New();
 
   // Prepare N streams, one for each offset
-  std::vector<std::unique_ptr<Stream>> hashes;
+  std::vector<std::unique_ptr<Hash>> hashes;
   for (int i{0}; i < N; i++)
     hashes.emplace_back(sched->MakeStream());
 

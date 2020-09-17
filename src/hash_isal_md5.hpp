@@ -17,11 +17,12 @@
 namespace hash {
 
 using StringPtr = std::shared_ptr<std::string>;
+using Digest = std::shared_future<std::string>;
 
 namespace md5 {
 namespace isal {
 
-class Stream;
+class Hash;
 
 /**
  * MD5 Scheduler for multiple streams.
@@ -30,44 +31,65 @@ class Scheduler {
  public:
   /**
    * Instantiate a Scheduler implementation.
-   * The technique helps hiding the implementation details and prevents
-   * too many headers to be included.
+   * The purpose of the technique helps hiding the implementation details
+   * of th Scheduler and prevents too specific or too many headers to be
+   * required by the calling app.
    *
    * @return A shared_pointer to a valid Scheduler implementation.
    */
   static std::shared_ptr<Scheduler> New();
 
+  /**
+   * Destructor of the Scheduler.
+   */
   virtual ~Scheduler() {}
 
   /**
    * Synchronous computation.
+   * Initiate a Hash and chains the mandatory calls to Update() and Finish()
    *
-   * @param s
-   * @return
+   * @param s a shared pointer to the data to input string.
+   * @return the digest of the input data.
+   * @throw std::logic_error upon an error.
    */
   std::string Compute(StringPtr s);
 
-  virtual std::unique_ptr<Stream> MakeStream() = 0;
+  /**
+   * Instantiate a Hash linked to the current Scheduler implementation.
+   * @return a pointer (and its ownership) on a valid Hash implementation.
+   * @throw std::exception upon an error
+   */
+  virtual std::unique_ptr<Hash> NewHash() = 0;
 
   /**
+   * Low-Level API
+   * Feed the hash with data.
    *
-   * @param id
+   * @param id the identifier of the stream into the Scheduler implementation
    * @param b
    */
-  virtual void UpdateStream(uint32_t id, StringPtr b) = 0;
+  virtual void Update(uint32_t id, StringPtr b) = 0;
 
   /**
+   * Low-Level API
+   * Inform the Hash that no more data is expected.
    *
-   * @param id
-   * @return
+   * @param id the identifier of the stream into the Scheduler implementation
+   * @return a shared future holding the digest
+   * @throw std::exception upon an error.
    */
-  virtual std::shared_future<std::string> FinishStream(uint32_t id) = 0;
+  virtual Digest Finish(uint32_t id) = 0;
 
   /**
+   * Low-Level API
+   * Releases the underlying hash to the Scheduler. That hash is unusable
+   * afterwards, unless a proper reallocation.
+   * Finishes the underlying hash if necessary.
    *
-   * @param id
+   * @param id the identifier of the stream into the Scheduler implementation
+   * @throw std::exception upon an error
    */
-  virtual void ReleaseStream(uint32_t id) = 0;
+  virtual void release(uint32_t id) = 0;
 
  protected:
   Scheduler() {}
@@ -79,31 +101,30 @@ class Scheduler {
 
 /**
  * RAII of a single checksum computation.
- *
  */
-class Stream {
+class Hash {
  public:
-  Stream() = delete;
+  Hash() = delete;
 
-  Stream(const Stream &o) = delete;
+  Hash(const Hash &o) = delete;
 
-  Stream(Stream &&o) :
+  Hash(Hash &&o) :
       scheduler_(std::move(o.scheduler_)), index_{o.index_} {}
 
-  explicit Stream(std::shared_ptr<Scheduler> srv, uint32_t index) :
+  explicit Hash(std::shared_ptr<Scheduler> srv, uint32_t index) :
       scheduler_(std::move(srv)), index_{index} {}
 
-  ~Stream() {
-    scheduler_->ReleaseStream(index_);
+  ~Hash() {
+    scheduler_->release(index_);
   }
 
-  Stream& Update(StringPtr b) {
-    scheduler_->UpdateStream(index_, std::move(b));
+  Hash &Update(StringPtr b) {
+    scheduler_->Update(index_, std::move(b));
     return *this;
   }
 
-  std::shared_future<std::string> Finish() {
-    return scheduler_->FinishStream(index_);
+  Digest Finish() {
+    return scheduler_->Finish(index_);
   }
 
  private:

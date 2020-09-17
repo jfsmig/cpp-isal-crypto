@@ -44,6 +44,14 @@ jobs:
             $PKG yasm nasm
             $PKG libgtest-dev libgoogle-glog-dev libgoogle-glog0v5
       - run:
+          name: Build google/benchmark
+          command: |
+            set -ex
+            cd vendor/benchmark
+            cmake -DBENCHMARK_ENABLE_GTEST_TESTS=off -DCMAKE_INSTALL_PREFIX=/usr .
+            make -j $(nproc --ignore=1)
+            make install
+      - run:
           name: Build isa-l_crypto
           command: |
             set -ex
@@ -84,6 +92,14 @@ jobs:
             virtualenv /tmp/env
             source /tmp/env/bin/activate
             pip install --upgrade cpplint
+      - run:
+          name: Build google/benchmark
+          command: |
+            set -ex
+            cd vendor/benchmark
+            cmake -DBENCHMARK_ENABLE_GTEST_TESTS=off -DCMAKE_INSTALL_PREFIX=/usr .
+            make -j $(nproc --ignore=1)
+            make install
       - run:
           name: Build isa-l_crypto
           command: |

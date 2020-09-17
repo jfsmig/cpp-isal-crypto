@@ -12,7 +12,7 @@
 #include <chrono>  // NOLINT
 
 using hash::StringPtr;
-using hash::md5::isal::Stream;
+using hash::md5::isal::Hash;
 using hash::md5::isal::Scheduler;
 
 static StringPtr empty = std::make_shared<std::string>("");
@@ -104,6 +104,7 @@ struct StreamEntry {
 
   StreamEntry() : hasher_{}, index_{0xFFFFFFFF}, state_{State::Idle} {
     hasher_.user_data = this;
+    result_future_ = result_.get_future();
   }
 
   ~StreamEntry() { flush(); }
@@ -151,7 +152,6 @@ struct StreamEntry {
 
   std::shared_future<std::string> finish(State st) {
     state_ = st;
-    result_future_ = result_.get_future();
     return result_future_;
   }
 };
@@ -165,13 +165,13 @@ class SchedulerImpl :
   SchedulerImpl();
 
  private:
-  std::unique_ptr<Stream> MakeStream() override;
+  std::unique_ptr<Hash> NewHash() override;
 
-  void UpdateStream(uint32_t id, StringPtr b) override;
+  void Update(uint32_t id, StringPtr b) override;
 
-  std::shared_future<std::string> FinishStream(uint32_t id) override;
+  std::shared_future<std::string> Finish(uint32_t id) override;
 
-  void ReleaseStream(uint32_t id) override;
+  void release(uint32_t id) override;
 
   // Main execution loop of the ISA-L core. Loop forwards to bg_step()
   void bg_run();
@@ -215,7 +215,7 @@ std::shared_ptr<Scheduler> Scheduler::New() {
 }
 
 std::string Scheduler::Compute(StringPtr s) {
-  return MakeStream()->Update(std::move(s)).Finish().get();
+  return NewHash()->Update(std::move(s)).Finish().get();
 }
 
 SchedulerImpl::SchedulerImpl() :
@@ -241,7 +241,7 @@ SchedulerImpl::~SchedulerImpl() {
   worker_.join();
 }
 
-std::unique_ptr<Stream> SchedulerImpl::MakeStream() {
+std::unique_ptr<Hash> SchedulerImpl::NewHash() {
   uint32_t idx;
   {
     std::lock_guard lock(mutex_);
@@ -254,10 +254,10 @@ std::unique_ptr<Stream> SchedulerImpl::MakeStream() {
   stream.state_ = State::Ready_First;
   hash_ctx_init(&stream.hasher_);
 
-  return std::make_unique<Stream>(shared_from_this(), idx);
+  return std::make_unique<Hash>(shared_from_this(), idx);
 }
 
-void SchedulerImpl::UpdateStream(uint32_t id, StringPtr b) {
+void SchedulerImpl::Update(uint32_t id, StringPtr b) {
   std::lock_guard lock(mutex_);
 
   auto &stream = streams_.at(id);
@@ -281,28 +281,28 @@ void SchedulerImpl::UpdateStream(uint32_t id, StringPtr b) {
 
     case State::Queued_First:
     case State::Queued_Update:
-      stream.pending_blocks_.push(std::move(b));
-      return barrier_.notify_one();
+      return stream.pending_blocks_.push(std::move(b));
 
     case State::Queued_Last:
     case State::Queued_Whole:
       throw std::logic_error("BUG: update() not allowed on finishing stream");
 
     case State::Computing_Update:
-      stream.pending_blocks_.push(std::move(b));
-      return barrier_.notify_one();
+      // jfs: a priori, no need to wake the BG thread if computing this stream
+      return stream.pending_blocks_.push(std::move(b));
 
     case State::Computing_Last:
       throw std::logic_error("BUG: update() not allowed on finishing stream");
 
     case State::Finished:
       throw std::logic_error("BUG: update() not allowed on finished stream");
-  }
 
-  throw std::logic_error("BUG: update() on unhandled state");
+    default:
+      abort();
+  }
 }
 
-std::shared_future<std::string> SchedulerImpl::FinishStream(uint32_t id) {
+std::shared_future<std::string> SchedulerImpl::Finish(uint32_t id) {
   std::lock_guard lock(mutex_);
 
   auto &stream = streams_.at(id);
@@ -344,7 +344,7 @@ std::shared_future<std::string> SchedulerImpl::FinishStream(uint32_t id) {
   }
 }
 
-void SchedulerImpl::ReleaseStream(uint32_t id) {
+void SchedulerImpl::release(uint32_t id) {
   {  // STEP 1
     std::lock_guard lock{mutex_};
 
@@ -378,7 +378,7 @@ void SchedulerImpl::ReleaseStream(uint32_t id) {
     }
   }
 
-  FinishStream(id).wait();
+  Finish(id).wait();
 
   label_release:
   {
@@ -388,6 +388,8 @@ void SchedulerImpl::ReleaseStream(uint32_t id) {
     stream.check(State::Finished);
 
     stream.state_ = State::Idle;
+    stream.result_ = std::promise<std::string>();
+    stream.result_future_ = stream.result_.get_future();
     streams_indexes_idle_.push(stream.index_);
   }
 }

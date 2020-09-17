@@ -10,7 +10,7 @@
 #include "../src/hash_isal_md5.hpp"
 
 using hash::md5::isal::Scheduler;
-using hash::md5::isal::Stream;
+using hash::md5::isal::Hash;
 using hash::StringPtr;
 
 #define N 8
@@ -23,9 +23,9 @@ int main(int argc, char **argv) {
   auto sched = Scheduler::New();
 
   // Prepare N streams, one for each offset
-  std::vector<std::unique_ptr<Stream>> hashes;
+  std::vector<std::unique_ptr<Hash>> hashes;
   for (int i{0}; i < N; i++)
-    hashes.emplace_back(sched->MakeStream());
+    hashes.emplace_back(sched->NewHash());
 
   // Feed the N streams, there the stream 'i' starts checksum'ing
   // at the line i-th line on the standard input. Without data copies.

@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
   std::vector<std::thread> threads;
   for (int i{0}; i < N; i++) {
     threads.emplace_back([sched]() {
-      auto hash = sched->MakeStream();
+      auto hash = sched->NewHash();
       hash->Update(buffer);
       auto digest = hash->Finish();
       std::cout << digest.get() << std::endl;
